@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orbixal.dev/schemas/results/tabular_envelope.schema.json",
+  "title": "TabularEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "columns", "rows", "cursor", "meta"],
+  "properties": {
+    "kind": {
+      "const": "tabular"
+    },
+    "columns": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type"],
+        "properties": {
+          "name": { "type": "string" },
+          "type": { "type": "string" }
+        }
+      }
+    },
+    "rows": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["row_id", "values"],
+        "properties": {
+          "row_id": { "type": "string" },
+          "values": { "type": "object" }
+        }
+      }
+    },
+    "cursor": {
+      "type": ["string", "null"]
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connector_key", "connector_version", "action", "request_id"],
+      "properties": {
+        "connector_key": { "type": "string" },
+        "connector_version": { "type": "string" },
+        "action": { "type": "string" },
+        "request_id": { "type": "string" }
+      }
+    },
+    "raw": {
+      "type": "object"
+    }
+  }
+}

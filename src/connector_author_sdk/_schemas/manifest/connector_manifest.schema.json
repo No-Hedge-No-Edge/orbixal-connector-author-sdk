@@ -1,0 +1,97 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orbixal.dev/schemas/manifest/connector_manifest.schema.json",
+  "title": "ConnectorManifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "key",
+    "name",
+    "version",
+    "manifest_schema_version",
+    "sdk_version",
+    "runtime_compatibility_range",
+    "capabilities",
+    "auth_schema",
+    "config_schema",
+    "resource_types",
+    "operations"
+  ],
+  "properties": {
+    "key": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "manifest_schema_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "sdk_version": {
+      "type": "string",
+      "minLength": 1
+    },
+    "runtime_compatibility_range": {
+      "type": "string",
+      "minLength": 1
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "auth_schema": {
+      "type": "object"
+    },
+    "config_schema": {
+      "type": "object"
+    },
+    "resource_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "operations": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "kind",
+          "input_schema"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["read", "query"]
+          },
+          "input_schema": {
+            "type": "object"
+          },
+          "output_schema": {
+            "type": "object"
+          }
+        }
+      }
+    }
+  }
+}

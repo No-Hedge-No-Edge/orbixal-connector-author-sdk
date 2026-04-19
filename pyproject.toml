@@ -1,0 +1,24 @@
+[build-system]
+requires = ["hatchling>=1.25.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "orbixal-connector-author-sdk"
+version = "0.1.0"
+description = "Internal-first SDK for building Orbixal connectors"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+  "click>=8.1,<9.0",
+  "httpx>=0.28,<1.0",
+  "jsonschema>=4.25,<5.0",
+]
+
+[project.scripts]
+orbixal-connector = "connector_author_sdk.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/connector_author_sdk"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"src/connector_author_sdk/_schemas" = "connector_author_sdk/_schemas"

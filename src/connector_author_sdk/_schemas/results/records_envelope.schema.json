@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://orbixal.dev/schemas/results/records_envelope.schema.json",
+  "title": "RecordsEnvelope",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "records", "cursor", "meta"],
+  "properties": {
+    "kind": {
+      "const": "records"
+    },
+    "records": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "type"],
+        "properties": {
+          "id": { "type": "string" },
+          "type": { "type": "string" },
+          "title": { "type": ["string", "null"] },
+          "content": { "type": "object" },
+          "attributes": { "type": "object" },
+          "timestamps": { "type": "object" },
+          "source": { "type": "object" }
+        }
+      }
+    },
+    "cursor": {
+      "type": ["string", "null"]
+    },
+    "meta": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["connector_key", "connector_version", "action", "request_id"],
+      "properties": {
+        "connector_key": { "type": "string" },
+        "connector_version": { "type": "string" },
+        "action": { "type": "string" },
+        "request_id": { "type": "string" }
+      }
+    },
+    "raw": {
+      "type": "object"
+    }
+  }
+}
