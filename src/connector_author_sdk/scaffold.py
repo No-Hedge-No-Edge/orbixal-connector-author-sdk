@@ -124,9 +124,9 @@ class {class_name}(Connector):
         return build_manifest(
             key="{connector_key}",
             name="{title_name}",
-            version="0.1.0",
+            version="0.1.1",
             manifest_schema_version="2026-01",
-            sdk_version="0.1.0",
+            sdk_version="0.1.1",
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get", "search", "resource_list"],
             auth_schema={{
@@ -214,9 +214,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "{package_name}"
-version = "0.1.0"
+version = "0.1.1"
 requires-python = ">=3.12"
-dependencies = ["orbixal-connector-author-sdk>=0.1.0"]
+dependencies = ["orbixal-connector-author-sdk>=0.1.1"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/{package_name}"]

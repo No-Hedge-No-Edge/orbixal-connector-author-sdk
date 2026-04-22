@@ -9,6 +9,12 @@ Local setup:
 - `uv lock`
 - `uv sync`
 - `uv run python -m unittest discover tests`
+- `python3 scripts/sync_canonical_contracts.py --source-repo /path/to/orbixal-data-connector`
+
+Canonical contract sync:
+- bundled manifest/result schemas and generated model modules are mirrored from `orbixal-data-connector/schemas/`
+- run `make sync-contracts` from this repo root when canonical connector contracts change
+- run `make check-contracts` in CI or before release to ensure the vendored mirror has not drifted
 
 Current local workflow:
 - `uv run orbixal-connector describe --connector module:ConnectorClass`
@@ -31,3 +37,7 @@ The SDK also ships:
 - a default local HTTP client for connector development
 - structured connector exception types for sanitized failures
 - a scaffold generator for new connector packages
+
+Release packaging:
+- `make build`
+- wheel and sdist artifacts are emitted under `dist/`

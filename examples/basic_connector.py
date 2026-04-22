@@ -26,15 +26,14 @@ class ExampleConnector(Connector):
         return build_manifest(
             key="example",
             name="Example Connector",
-            version="0.1.0",
+            version="0.1.1",
             manifest_schema_version="2026-01",
-            sdk_version="0.1.0",
+            sdk_version="0.1.1",
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get", "search", "resource_list"],
             auth_schema={
-                "type": "object",
-                "properties": {"access_token": {"type": "string"}},
-                "required": ["access_token"],
+                "type": "oauth2",
+                "required_fields": ["access_token"],
             },
             config_schema={
                 "type": "object",

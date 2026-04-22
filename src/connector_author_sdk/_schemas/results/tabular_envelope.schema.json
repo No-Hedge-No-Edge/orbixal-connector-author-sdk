@@ -44,7 +44,20 @@
         "connector_key": { "type": "string" },
         "connector_version": { "type": "string" },
         "action": { "type": "string" },
-        "request_id": { "type": "string" }
+        "request_id": { "type": "string" },
+        "entitlement": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["provider", "requires_byok", "storage_policy", "exposure_policy"],
+          "properties": {
+            "provider": { "type": "string", "minLength": 1 },
+            "requires_byok": { "type": "boolean" },
+            "storage_policy": { "type": "string", "minLength": 1 },
+            "exposure_policy": { "type": "string", "minLength": 1 },
+            "audit_policy": { "type": "string", "minLength": 1 },
+            "notes": { "type": "string" }
+          }
+        }
       }
     },
     "raw": {

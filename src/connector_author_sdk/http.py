@@ -9,7 +9,7 @@ import httpx
 from connector_author_sdk.errors import ProviderUnavailableError
 
 
-DEFAULT_USER_AGENT = "orbixal-connector-author-sdk/0.1"
+DEFAULT_USER_AGENT = "orbixal-connector-author-sdk/0.1.1"
 
 
 class SimpleHttpResponse:

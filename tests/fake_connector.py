@@ -30,9 +30,8 @@ class FakeConnector(Connector):
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get", "search", "resource_list"],
             auth_schema={
-                "type": "object",
-                "properties": {"access_token": {"type": "string"}},
-                "required": ["access_token"],
+                "type": "oauth2",
+                "required_fields": ["access_token"],
             },
             config_schema={
                 "type": "object",

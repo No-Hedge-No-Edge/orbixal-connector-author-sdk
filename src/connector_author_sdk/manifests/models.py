@@ -42,10 +42,9 @@ class ConnectorManifest:
     config_schema: dict[str, Any] = field(default_factory=dict)
     resource_types: list[str] = field(default_factory=list)
     operations: list[OperationDefinition] = field(default_factory=list)
-    description: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
-        payload = {
+        return {
             "key": self.key,
             "name": self.name,
             "version": self.version,
@@ -58,9 +57,6 @@ class ConnectorManifest:
             "resource_types": list(self.resource_types),
             "operations": [operation.to_dict() for operation in self.operations],
         }
-        if self.description is not None:
-            payload["description"] = self.description
-        return payload
 
 
 __all__ = [

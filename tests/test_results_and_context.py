@@ -38,12 +38,14 @@ class ResultsAndContextTests(unittest.TestCase):
                 connector_version="1.0.0",
                 action="get_issue",
                 request_id="req_1",
+                entitlement={"provider": "finnhub", "requires_byok": False, "storage_policy": "restricted", "exposure_policy": "workspace"},
             )
         )
         self.assertEqual(result.kind, "records")
         self.assertEqual(result.payload["records"][0]["id"], "1")
         self.assertEqual(result.cursor, "next")
         self.assertEqual(result.to_dict()["meta"]["action"], "get_issue")
+        self.assertEqual(result.to_dict()["meta"]["entitlement"]["provider"], "finnhub")
 
     def test_tabular_result_converts_to_connector_result(self) -> None:
         result = TabularResult(

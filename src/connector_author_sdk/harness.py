@@ -149,6 +149,7 @@ def build_context(
 ) -> ConnectorContext:
     manifest = connector.describe()
     resolved_auth_payload = _ensure_mapping(auth_payload)
+    manifest_auth_type = str(manifest.auth_schema.get("type") or "").strip() or "none"
     return ConnectorContext(
         instance_id=instance_id,
         connector_key=manifest.key,
@@ -157,7 +158,7 @@ def build_context(
         owner_id=owner_id,
         config=_ensure_mapping(config),
         auth=AuthContext(
-            auth_type=auth_type or ("configured" if resolved_auth_payload else "none"),
+            auth_type=auth_type or manifest_auth_type,
             values=resolved_auth_payload,
         ),
         http=http or SimpleHttpClient(),

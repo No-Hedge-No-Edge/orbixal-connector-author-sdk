@@ -78,6 +78,7 @@ class ResultMeta:
     connector_version: str
     action: str
     request_id: str
+    entitlement: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)

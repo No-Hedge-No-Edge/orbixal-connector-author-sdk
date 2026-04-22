@@ -51,7 +51,38 @@
       "uniqueItems": true
     },
     "auth_schema": {
-      "type": "object"
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["type"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["none", "api_key", "oauth2", "basic_auth", "service_account", "custom_headers"]
+        },
+        "required_fields": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "optional_fields": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "entitlement": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["provider", "requires_byok", "storage_policy", "exposure_policy"],
+      "properties": {
+        "provider": { "type": "string", "minLength": 1 },
+        "requires_byok": { "type": "boolean" },
+        "storage_policy": { "type": "string", "minLength": 1 },
+        "exposure_policy": { "type": "string", "minLength": 1 },
+        "audit_policy": { "type": "string", "minLength": 1 },
+        "notes": { "type": "string" }
+      }
     },
     "config_schema": {
       "type": "object"

@@ -51,7 +51,6 @@ def build_manifest(
     config_schema: dict[str, Any],
     resource_types: list[str],
     operations: list[OperationDefinition],
-    description: str | None = None,
 ) -> ConnectorManifest:
     return ConnectorManifest(
         key=key,
@@ -65,5 +64,4 @@ def build_manifest(
         config_schema=config_schema,
         resource_types=resource_types,
         operations=operations,
-        description=description,
     )

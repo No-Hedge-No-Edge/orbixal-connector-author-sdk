@@ -1,7 +1,15 @@
-
 # Generated from canonical contract schemas. Do not edit by hand.
 
 from typing import Any, Literal, TypedDict
+
+
+class EntitlementDescriptor(TypedDict, total=False):
+    provider: str
+    requires_byok: bool
+    storage_policy: str
+    exposure_policy: str
+    audit_policy: str
+    notes: str
 
 
 class RecordItem(TypedDict, total=False):
@@ -19,6 +27,7 @@ class RecordsMeta(TypedDict):
     connector_version: str
     action: str
     request_id: str
+    entitlement: EntitlementDescriptor | None
 
 
 class RecordsEnvelope(TypedDict, total=False):
@@ -44,6 +53,7 @@ class TabularMeta(TypedDict):
     connector_version: str
     action: str
     request_id: str
+    entitlement: EntitlementDescriptor | None
 
 
 class TabularEnvelope(TypedDict, total=False):
@@ -53,3 +63,6 @@ class TabularEnvelope(TypedDict, total=False):
     cursor: str | None
     meta: TabularMeta
     raw: dict[str, Any]
+
+
+ENTITLEMENT_REQUIRED_FIELDS = ['exposure_policy', 'provider', 'requires_byok', 'storage_policy']

@@ -39,7 +39,7 @@ class BrokenConnector(Connector):
             sdk_version="1.0.0",
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get", "search"],
-            auth_schema={"type": "object"},
+            auth_schema={"type": "none"},
             config_schema={"type": "object"},
             resource_types=["item"],
             operations=[
