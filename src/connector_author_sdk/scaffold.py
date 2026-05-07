@@ -114,6 +114,7 @@ from connector_author_sdk import (
     TabularResult,
     ValidationResult,
     build_manifest,
+    oauth2_auth,
     query_operation,
     read_operation,
 )
@@ -129,11 +130,7 @@ class {class_name}(Connector):
             sdk_version="0.1.1",
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get", "search", "resource_list"],
-            auth_schema={{
-                "type": "object",
-                "properties": {{"access_token": {{"type": "string"}}}},
-                "required": ["access_token"],
-            }},
+            auth_schema=oauth2_auth(),
             config_schema={{
                 "type": "object",
                 "properties": {{"workspace": {{"type": "string"}}}},

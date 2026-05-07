@@ -16,6 +16,7 @@ from connector_author_sdk import (
     ValidationError,
     ValidationResult,
     build_manifest,
+    oauth2_auth,
     query_operation,
     read_operation,
 )
@@ -31,10 +32,7 @@ class ExampleConnector(Connector):
             sdk_version="0.1.1",
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get", "search", "resource_list"],
-            auth_schema={
-                "type": "oauth2",
-                "required_fields": ["access_token"],
-            },
+            auth_schema=oauth2_auth(),
             config_schema={
                 "type": "object",
                 "properties": {"workspace": {"type": "string"}},

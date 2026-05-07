@@ -37,7 +37,10 @@ The SDK also ships:
 - a default local HTTP client for connector development
 - structured connector exception types for sanitized failures
 - a scaffold generator for new connector packages
+- OAuth auth-schema helpers such as `oauth2_auth()` for declaring resolved auth needs
 
-Release packaging:
-- `make build`
-- wheel and sdist artifacts are emitted under `dist/`
+OAuth note:
+- connector manifests may declare OAuth requirements and non-secret metadata
+- OAuth app credentials and callbacks are backend-owned
+- never put `client_id`, `client_secret`, callback URLs, access tokens, or refresh tokens
+  in a manifest or package

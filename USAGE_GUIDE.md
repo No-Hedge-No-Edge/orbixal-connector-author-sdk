@@ -72,12 +72,13 @@ The smallest working reference is the example connector in `examples/basic_conne
 
 ## 4. Define the Manifest
 
-Use `build_manifest`, `read_operation`, and `query_operation` from `src/connector_author_sdk/manifests/builders.py`.
+Use `build_manifest`, `read_operation`, `query_operation`, and auth helpers from
+`src/connector_author_sdk/manifests/builders.py`.
 
 Example:
 
 ```python
-from connector_author_sdk import build_manifest, read_operation, query_operation
+from connector_author_sdk import build_manifest, oauth2_auth, read_operation, query_operation
 
 def describe(self):
     return build_manifest(
@@ -88,10 +89,7 @@ def describe(self):
         sdk_version="0.1.1",
         runtime_compatibility_range=">=1.0,<2.0",
         capabilities=["record_get", "search", "resource_list"],
-        auth_schema={
-            "type": "oauth2",
-            "required_fields": ["access_token"],
-        },
+        auth_schema=oauth2_auth(provider="github", default_scopes=["repo", "read:user"]),
         config_schema={
             "type": "object",
             "properties": {
@@ -127,6 +125,10 @@ def describe(self):
 ```
 
 Canonical manifest validation is provided by `src/connector_author_sdk/validation.py`.
+
+OAuth helpers only declare the resolved auth fields a connector needs. OAuth app credentials
+such as `client_secret`, callback URLs, authorization sessions, code exchange, token storage,
+refresh, and revocation are backend-owned.
 
 ## 5. Validate Config Semantics
 
@@ -171,6 +173,10 @@ def test_connection(self, ctx):
     if not token:
         ...
 ```
+
+For OAuth connectors, `ctx.auth` contains backend-resolved runtime auth. Connector code should
+read values such as `access_token`; it should not start OAuth, exchange authorization codes,
+store refresh tokens, or know the OAuth app `client_secret`.
 
 For local runs, the harness injects a default HTTP client from `src/connector_author_sdk/http.py`.
 

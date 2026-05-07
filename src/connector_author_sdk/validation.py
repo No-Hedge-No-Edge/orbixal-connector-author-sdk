@@ -14,6 +14,23 @@ from connector_author_sdk.results.models import ValidationError
 
 
 PACKAGE_SCHEMA_ROOT = Path(__file__).resolve().parent / "_schemas"
+PLATFORM_AUTH_TYPES = {
+    "none",
+    "api_key",
+    "oauth2",
+    "basic_auth",
+    "service_account",
+    "custom_headers",
+}
+SENSITIVE_MANIFEST_KEYS = {"client_secret", "clientSecret"}
+BACKEND_MANAGED_OAUTH_KEYS = {
+    "callbackUrl",
+    "callback_url",
+    "clientId",
+    "client_id",
+    "redirectUri",
+    "redirect_uri",
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,7 +75,9 @@ def validate_json_schema(
 
 def validate_manifest(manifest: ConnectorManifest) -> ValidationResult:
     schema = load_platform_schema("manifest/connector_manifest.schema.json")
-    return validate_json_schema(manifest.to_dict(), schema)
+    base_result = validate_json_schema(manifest.to_dict(), schema)
+    errors = [*base_result.errors, *_validate_manifest_auth_semantics(manifest)]
+    return ValidationResult.from_errors(errors)
 
 
 def validate_config(
@@ -72,57 +91,9 @@ def validate_auth_payload(
     auth_payload: Mapping[str, Any] | dict[str, Any],
     manifest: ConnectorManifest,
 ) -> ValidationResult:
-    auth_type = str(manifest.auth_schema.get("type") or "").strip()
-    required_fields = [
-        field_name
-        for field_name in manifest.auth_schema.get("required_fields", [])
-        if isinstance(field_name, str) and field_name.strip()
-    ]
-    optional_fields = [
-        field_name
-        for field_name in manifest.auth_schema.get("optional_fields", [])
-        if isinstance(field_name, str) and field_name.strip()
-    ]
-    payload = dict(auth_payload)
-    errors: list[ValidationError] = []
-
-    if auth_type == "none":
-        if payload:
-            errors.append(
-                ValidationError(
-                    field="$",
-                    message="Auth payload must be empty when auth_schema.type is 'none'.",
-                )
-            )
-        return ValidationResult.from_errors(errors)
-
-    if not auth_type:
-        return ValidationResult.from_errors(
-            [ValidationError(field="auth_schema.type", message="Manifest auth_schema.type is required.")]
-        )
-
-    for field_name in required_fields:
-        value = payload.get(field_name)
-        if value is None or (isinstance(value, str) and not value.strip()):
-            errors.append(
-                ValidationError(
-                    field=field_name,
-                    message="Missing required auth field.",
-                )
-            )
-
-    allowed_fields = set(required_fields) | set(optional_fields)
-    if auth_type != "custom_headers":
-        for field_name in sorted(payload):
-            if field_name not in allowed_fields:
-                errors.append(
-                    ValidationError(
-                        field=field_name,
-                        message="Unexpected auth field; declare it in auth_schema.required_fields or optional_fields.",
-                    )
-                )
-
-    return ValidationResult.from_errors(errors)
+    if _is_platform_auth_schema(manifest.auth_schema):
+        return _validate_platform_auth_payload(auth_payload, manifest.auth_schema)
+    return validate_json_schema(auth_payload, manifest.auth_schema)
 
 
 def validate_records_envelope(
@@ -155,3 +126,165 @@ def validate_result_envelope(
             )
         ]
     )
+
+
+def _validate_manifest_auth_semantics(manifest: ConnectorManifest) -> list[ValidationError]:
+    errors = _reject_sensitive_manifest_keys(manifest.to_dict())
+    auth_schema = manifest.auth_schema
+    if not _is_platform_auth_schema(auth_schema):
+        return errors
+
+    auth_type = auth_schema.get("type")
+    required_fields = _string_list(auth_schema.get("required_fields", []))
+    optional_fields = _string_list(auth_schema.get("optional_fields", []))
+    if required_fields is None:
+        errors.append(
+            ValidationError(
+                field="auth_schema.required_fields",
+                message="required_fields must be a list of strings.",
+            )
+        )
+    if optional_fields is None:
+        errors.append(
+            ValidationError(
+                field="auth_schema.optional_fields",
+                message="optional_fields must be a list of strings.",
+            )
+        )
+    if (
+        auth_type == "oauth2"
+        and required_fields is not None
+        and "access_token" not in required_fields
+    ):
+        errors.append(
+            ValidationError(
+                field="auth_schema.required_fields",
+                message="oauth2 auth schemas must require access_token.",
+            )
+        )
+    if auth_type == "oauth2":
+        errors.extend(_reject_backend_managed_oauth_keys(auth_schema, "auth_schema"))
+    return errors
+
+
+def _validate_platform_auth_payload(
+    auth_payload: Mapping[str, Any] | dict[str, Any],
+    auth_schema: Mapping[str, Any],
+) -> ValidationResult:
+    auth_type = auth_schema.get("type")
+    if auth_type == "none":
+        if auth_payload:
+            return ValidationResult.from_errors(
+                [
+                    ValidationError(
+                        field="$",
+                        message="Authless connectors must not receive auth payload fields.",
+                    )
+                ]
+            )
+        return ValidationResult.ok()
+
+    required_fields = _string_list(auth_schema.get("required_fields", []))
+    optional_fields = _string_list(auth_schema.get("optional_fields", []))
+    errors: list[ValidationError] = []
+    if required_fields is None:
+        errors.append(
+            ValidationError(
+                field="auth_schema.required_fields",
+                message="required_fields must be a list of strings.",
+            )
+        )
+        required_fields = []
+    if optional_fields is None:
+        errors.append(
+            ValidationError(
+                field="auth_schema.optional_fields",
+                message="optional_fields must be a list of strings.",
+            )
+        )
+        optional_fields = []
+
+    allowed_fields = {*required_fields, *optional_fields}
+    for field_name in required_fields:
+        if field_name not in auth_payload:
+            errors.append(
+                ValidationError(
+                    field=field_name,
+                    message=f"'{field_name}' is a required auth field.",
+                )
+            )
+    for field_name in auth_payload:
+        if field_name not in allowed_fields:
+            errors.append(
+                ValidationError(
+                    field=field_name,
+                    message=f"Unexpected auth field '{field_name}'.",
+                )
+            )
+    return ValidationResult.from_errors(errors)
+
+
+def _is_platform_auth_schema(auth_schema: Mapping[str, Any] | dict[str, Any]) -> bool:
+    return auth_schema.get("type") in PLATFORM_AUTH_TYPES
+
+
+def _reject_sensitive_manifest_keys(
+    payload: Mapping[str, Any],
+    path: str = "$",
+) -> list[ValidationError]:
+    errors: list[ValidationError] = []
+    for key, value in payload.items():
+        field_path = f"{path}.{key}"
+        if key in SENSITIVE_MANIFEST_KEYS:
+            errors.append(
+                ValidationError(
+                    field=field_path,
+                    message=(
+                        "OAuth client secrets must be registered with the backend, "
+                        "not embedded in connector manifests."
+                    ),
+                )
+            )
+        if isinstance(value, Mapping):
+            errors.extend(_reject_sensitive_manifest_keys(value, field_path))
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                if isinstance(item, Mapping):
+                    errors.extend(_reject_sensitive_manifest_keys(item, f"{field_path}[{index}]"))
+    return errors
+
+
+def _reject_backend_managed_oauth_keys(
+    payload: Mapping[str, Any],
+    path: str,
+) -> list[ValidationError]:
+    errors: list[ValidationError] = []
+    for key, value in payload.items():
+        field_path = f"{path}.{key}"
+        if key in BACKEND_MANAGED_OAUTH_KEYS:
+            errors.append(
+                ValidationError(
+                    field=field_path,
+                    message=(
+                        "OAuth app client IDs and callback URLs must be registered "
+                        "with the backend, not embedded in connector manifests."
+                    ),
+                )
+            )
+        if isinstance(value, Mapping):
+            errors.extend(_reject_backend_managed_oauth_keys(value, field_path))
+        elif isinstance(value, list):
+            for index, item in enumerate(value):
+                if isinstance(item, Mapping):
+                    errors.extend(
+                        _reject_backend_managed_oauth_keys(item, f"{field_path}[{index}]")
+                    )
+    return errors
+
+
+def _string_list(value: object) -> list[str] | None:
+    if not isinstance(value, list):
+        return None
+    if not all(isinstance(item, str) and item for item in value):
+        return None
+    return value

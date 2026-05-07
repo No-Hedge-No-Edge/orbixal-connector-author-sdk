@@ -2,7 +2,12 @@ from typing import Any, Mapping
 
 from connector_author_sdk.connector import Connector
 from connector_author_sdk.context import ConnectorContext
-from connector_author_sdk.manifests import build_manifest, query_operation, read_operation
+from connector_author_sdk.manifests import (
+    build_manifest,
+    oauth2_auth,
+    query_operation,
+    read_operation,
+)
 from connector_author_sdk.results import (
     ColumnDef,
     ConnectionTestResult,
@@ -29,10 +34,7 @@ class FakeConnector(Connector):
             sdk_version="1.0.0",
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get", "search", "resource_list"],
-            auth_schema={
-                "type": "oauth2",
-                "required_fields": ["access_token"],
-            },
+            auth_schema=oauth2_auth(),
             config_schema={
                 "type": "object",
                 "properties": {"workspace": {"type": "string"}},
