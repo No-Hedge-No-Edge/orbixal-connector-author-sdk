@@ -24,12 +24,41 @@ Current local workflow:
 - `uv run orbixal-connector run read --connector module:ConnectorClass --action get_item --params '{"id":1}'`
 - `uv run orbixal-connector run query --connector module:ConnectorClass --action search --params '{"query":"foo"}'`
 - `uv run orbixal-connector package --connector module:ConnectorClass --output-dir ./dist/connector`
+- `uv run orbixal-connector inspect-artifact --package-dir ./dist/connector/<connector_key>/<connector_version>`
+- `uv run orbixal-connector verify-artifact --package-dir ./dist/connector/<connector_key>/<connector_version>`
+- `uv run orbixal-connector publish-local --package-dir ./dist/connector/<connector_key>/<connector_version> --registry-url http://localhost:8000/api/v1`
 - `uv run orbixal-connector init --connector-key my_api --output-dir ./my_connector`
 
 Packaging output:
 - `./dist/connector/<connector_key>/<connector_version>/manifest.json`
 - `./dist/connector/<connector_key>/<connector_version>/package_metadata.json`
+- `./dist/connector/<connector_key>/<connector_version>/connector_code.zip`
 - `./dist/connector/<connector_key>/<connector_version>/checksums.json`
+
+By default, packaging infers the connector module or package source from the
+`module:Class` target. For production package layouts, pass one or more
+`--source` values to include the exact importable package directory or source
+file:
+
+```bash
+uv run orbixal-connector package \
+  --connector my_connector.connector:MyConnector \
+  --source ./src/my_connector \
+  --output-dir ./dist/connector
+```
+
+Local publication helper:
+
+```bash
+uv run orbixal-connector publish-local \
+  --package-dir ./dist/connector/<connector_key>/<connector_version> \
+  --registry-url http://localhost:8000/api/v1 \
+  --approve
+```
+
+`publish-local` is only for dev/local registry flows where the registry service
+can read the same package directory path. Production publication should use a
+registry upload intent or pre-signed object-store upload.
 
 Local `read` and `query` outputs are validated against the canonical `records` and `tabular` schemas before they are emitted.
 

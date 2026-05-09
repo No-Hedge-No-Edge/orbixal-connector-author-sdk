@@ -20,6 +20,7 @@ GENERATED_DIR = REPO_ROOT / "src" / "connector_author_sdk" / "generated"
 SCHEMA_DIR = REPO_ROOT / "src" / "connector_author_sdk" / "_schemas"
 CANONICAL_SCHEMA_PATHS = (
     ("manifest/connector_manifest.schema.json", "manifest/connector_manifest.schema.json"),
+    ("package/package_metadata.schema.json", "package/package_metadata.schema.json"),
     ("results/records_envelope.schema.json", "results/records_envelope.schema.json"),
     ("results/tabular_envelope.schema.json", "results/tabular_envelope.schema.json"),
 )

@@ -80,6 +80,13 @@ def validate_manifest(manifest: ConnectorManifest) -> ValidationResult:
     return ValidationResult.from_errors(errors)
 
 
+def validate_package_metadata(
+    metadata: Mapping[str, Any] | dict[str, Any],
+) -> ValidationResult:
+    schema = load_platform_schema("package/package_metadata.schema.json")
+    return validate_json_schema(metadata, schema)
+
+
 def validate_config(
     config: Mapping[str, Any] | dict[str, Any],
     manifest: ConnectorManifest,

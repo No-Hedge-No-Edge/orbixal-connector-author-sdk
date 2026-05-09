@@ -118,6 +118,7 @@ def build_manifest(
     config_schema: dict[str, Any],
     resource_types: list[str],
     operations: list[OperationDefinition],
+    entitlement: dict[str, Any] | None = None,
 ) -> ConnectorManifest:
     return ConnectorManifest(
         key=key,
@@ -128,6 +129,7 @@ def build_manifest(
         runtime_compatibility_range=runtime_compatibility_range,
         capabilities=capabilities,
         auth_schema=auth_schema,
+        entitlement=entitlement,
         config_schema=config_schema,
         resource_types=resource_types,
         operations=operations,

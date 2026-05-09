@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-import sys
 from typing import Any
 
 import click
+import httpx
 
 from connector_author_sdk.errors import ConnectorError
 from connector_author_sdk.harness import (
@@ -19,7 +19,11 @@ from connector_author_sdk.harness import (
     run_test_connection,
     validate_connector,
 )
-from connector_author_sdk.packaging import package_connector
+from connector_author_sdk.packaging import (
+    inspect_package_artifact,
+    package_connector,
+    verify_package_artifact,
+)
 from connector_author_sdk.scaffold import scaffold_connector
 
 
@@ -39,6 +43,21 @@ def _emit(payload: dict[str, Any]) -> None:
 
 def _emit_error(payload: dict[str, Any]) -> None:
     click.echo(json.dumps(payload, indent=2, sort_keys=True), err=True)
+
+
+def _registry_response_detail(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except ValueError:
+        return response.text or "Registry returned an empty error response."
+    if isinstance(payload, dict):
+        detail = payload.get("detail")
+        if isinstance(detail, str):
+            return detail
+        error_payload = payload.get("error")
+        if isinstance(error_payload, dict) and isinstance(error_payload.get("message"), str):
+            return error_payload["message"]
+    return response.text or "Registry returned an error response."
 
 
 def _with_error_handling(func):
@@ -205,20 +224,221 @@ def _list_resources_command(**kwargs: Any) -> int:
 @cli.command("package")
 @click.option("--connector", required=True)
 @click.option("--output-dir", required=True)
-def package_command(connector: str, output_dir: str) -> int:
-    return _package_command(connector=connector, output_dir=output_dir)
+@click.option(
+    "--source",
+    "sources",
+    multiple=True,
+    type=click.Path(exists=True, path_type=Path),
+    help="Source file or package directory to include in the executable bundle. May be repeated.",
+)
+def package_command(connector: str, output_dir: str, sources: tuple[Path, ...]) -> int:
+    return _package_command(connector=connector, output_dir=output_dir, sources=sources)
 
 
 @_with_error_handling
-def _package_command(*, connector: str, output_dir: str) -> int:
+def _package_command(*, connector: str, output_dir: str, sources: tuple[Path, ...] = ()) -> int:
     loaded_connector = load_connector(connector)
     artifact = package_connector(
         loaded_connector,
         connector_target=connector,
         output_dir=output_dir,
+        source_paths=sources or None,
     )
     _emit(artifact.to_dict())
     return 0
+
+
+@cli.command("inspect-artifact")
+@click.option("--package-dir", required=True, type=click.Path(exists=True, path_type=Path))
+def inspect_artifact_command(package_dir: Path) -> int:
+    return _inspect_artifact_command(package_dir=package_dir)
+
+
+@_with_error_handling
+def _inspect_artifact_command(*, package_dir: Path) -> int:
+    _emit(inspect_package_artifact(package_dir))
+    return 0
+
+
+@cli.command("verify-artifact")
+@click.option("--package-dir", required=True, type=click.Path(exists=True, path_type=Path))
+def verify_artifact_command(package_dir: Path) -> int:
+    return _verify_artifact_command(package_dir=package_dir)
+
+
+@_with_error_handling
+def _verify_artifact_command(*, package_dir: Path) -> int:
+    _emit(verify_package_artifact(package_dir))
+    return 0
+
+
+@cli.command("publish-local")
+@click.option(
+    "--package-dir",
+    required=True,
+    type=click.Path(exists=True, file_okay=False, path_type=Path),
+    help="Packaged connector directory visible to the registry service filesystem.",
+)
+@click.option(
+    "--registry-url",
+    default="http://localhost:8000/api/v1",
+    show_default=True,
+    help="Connector registry/control-plane API base URL.",
+)
+@click.option("--publisher-type", default="first_party", show_default=True)
+@click.option("--publisher-id", default="orbixal", show_default=True)
+@click.option("--visibility", default="internal", show_default=True)
+@click.option("--actor-type")
+@click.option("--actor-id")
+@click.option("--approve/--no-approve", default=False, show_default=True)
+@click.option("--set-as-default/--no-set-as-default", default=True, show_default=True)
+@click.option("--set-as-latest/--no-set-as-latest", default=True, show_default=True)
+def publish_local_command(
+    package_dir: Path,
+    registry_url: str,
+    publisher_type: str,
+    publisher_id: str,
+    visibility: str,
+    actor_type: str | None,
+    actor_id: str | None,
+    approve: bool,
+    set_as_default: bool,
+    set_as_latest: bool,
+) -> int:
+    return _publish_local_command(
+        package_dir=package_dir,
+        registry_url=registry_url,
+        publisher_type=publisher_type,
+        publisher_id=publisher_id,
+        visibility=visibility,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        approve=approve,
+        set_as_default=set_as_default,
+        set_as_latest=set_as_latest,
+    )
+
+
+@_with_error_handling
+def _publish_local_command(
+    *,
+    package_dir: Path,
+    registry_url: str,
+    publisher_type: str,
+    publisher_id: str,
+    visibility: str,
+    actor_type: str | None,
+    actor_id: str | None,
+    approve: bool,
+    set_as_default: bool,
+    set_as_latest: bool,
+) -> int:
+    payload = publish_local_package(
+        package_dir=package_dir,
+        registry_url=registry_url,
+        publisher_type=publisher_type,
+        publisher_id=publisher_id,
+        visibility=visibility,
+        actor_type=actor_type,
+        actor_id=actor_id,
+        approve=approve,
+        set_as_default=set_as_default,
+        set_as_latest=set_as_latest,
+    )
+    _emit(payload)
+    return 0
+
+
+def publish_local_package(
+    *,
+    package_dir: Path,
+    registry_url: str,
+    publisher_type: str = "first_party",
+    publisher_id: str = "orbixal",
+    visibility: str = "internal",
+    actor_type: str | None = None,
+    actor_id: str | None = None,
+    approve: bool = False,
+    set_as_default: bool = True,
+    set_as_latest: bool = True,
+    http_client: httpx.Client | None = None,
+) -> dict[str, Any]:
+    """Submit a local package directory to a registry API and optionally approve it."""
+
+    base_url = registry_url.rstrip("/")
+    submission_payload = {
+        "package_dir": str(package_dir.expanduser().resolve()),
+        "publisher_type": publisher_type,
+        "publisher_id": publisher_id,
+        "visibility": visibility,
+        "actor_type": actor_type,
+        "actor_id": actor_id,
+    }
+    owns_client = http_client is None
+    client = http_client or httpx.Client(timeout=30)
+    try:
+        submission = _registry_json_request(
+            client,
+            "POST",
+            f"{base_url}/connectors/publication-submissions/local-package",
+            json_payload=submission_payload,
+        )
+        result: dict[str, Any] = {"submission": submission}
+        if approve:
+            submission_id = submission.get("id")
+            if not isinstance(submission_id, str) or not submission_id:
+                raise ConnectorError(
+                    code="registry_publication_failed",
+                    message="Registry submission response did not include an id.",
+                    details={"registry_url": base_url},
+                )
+            approval = _registry_json_request(
+                client,
+                "POST",
+                f"{base_url}/connectors/publication-submissions/{submission_id}/approve",
+                json_payload={
+                    "actor_type": actor_type,
+                    "actor_id": actor_id,
+                    "set_as_default": set_as_default,
+                    "set_as_latest": set_as_latest,
+                },
+            )
+            result["approval"] = approval
+        return result
+    finally:
+        if owns_client:
+            client.close()
+
+
+def _registry_json_request(
+    client: httpx.Client,
+    method: str,
+    url: str,
+    *,
+    json_payload: dict[str, Any],
+) -> dict[str, Any]:
+    try:
+        response = client.request(method, url, json=json_payload)
+    except httpx.HTTPError as exc:
+        raise ConnectorError(
+            code="registry_unavailable",
+            message=f"Registry request failed: {exc}",
+            details={"url": url},
+        ) from exc
+    if not response.is_success:
+        raise ConnectorError(
+            code="registry_publication_failed",
+            message=_registry_response_detail(response),
+            details={"url": url, "status_code": response.status_code},
+        )
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ConnectorError(
+            code="registry_publication_failed",
+            message="Registry returned a non-object JSON response.",
+            details={"url": url},
+        )
+    return payload
 
 
 @cli.command("init")

@@ -380,7 +380,7 @@ uv run orbixal-connector package \
   --output-dir ./dist/connectors
 ```
 
-Current bundle layout:
+Bundle layout:
 
 ```text
 dist/connectors/
@@ -388,7 +388,18 @@ dist/connectors/
     <connector_version>/
       manifest.json
       package_metadata.json
+      connector_code.zip
       checksums.json
+```
+
+By default, the package command infers source files from the connector target. For
+real connector repositories, pass the importable package directory explicitly:
+
+```bash
+uv run orbixal-connector package \
+  --connector my_connector.connector:MyConnector \
+  --source ./src/my_connector \
+  --output-dir ./dist/connectors
 ```
 
 Packaging helpers live in `src/connector_author_sdk/packaging.py`.
@@ -403,8 +414,48 @@ Packaging helpers live in `src/connector_author_sdk/packaging.py`.
 - `runtime_compatibility_range`
 - `resource_types`
 - operation names and kinds
+- runtime load metadata pointing at `connector_code.zip`
 
-`checksums.json` currently contains SHA-256 checksums for the bundle files.
+`checksums.json` contains SHA-256 checksums for the manifest, metadata, and code
+archive. `connector_code.zip` is deterministic and excludes common local cache,
+build, virtual environment, and secret-like files.
+
+Inspect a bundle:
+
+```bash
+uv run orbixal-connector inspect-artifact \
+  --package-dir ./dist/connectors/<connector_key>/<connector_version>
+```
+
+Verify checksums and entrypoint importability:
+
+```bash
+uv run orbixal-connector verify-artifact \
+  --package-dir ./dist/connectors/<connector_key>/<connector_version>
+```
+
+Submit a package to a local/dev registry publication flow:
+
+```bash
+uv run orbixal-connector publish-local \
+  --package-dir ./dist/connectors/<connector_key>/<connector_version> \
+  --registry-url http://localhost:8000/api/v1
+```
+
+Submit and immediately approve in a trusted local environment:
+
+```bash
+uv run orbixal-connector publish-local \
+  --package-dir ./dist/connectors/<connector_key>/<connector_version> \
+  --registry-url http://localhost:8000/api/v1 \
+  --actor-type user \
+  --actor-id admin_123 \
+  --approve
+```
+
+This command sends the local filesystem path to the registry. It only works when
+the registry service can read that same path. Production publication should use
+object storage upload intent or pre-signed upload URLs instead.
 
 ## 13. Use the Example Connector
 

@@ -17,6 +17,15 @@ class OperationDefinition(TypedDict, total=False):
     output_schema: dict[str, Any]
 
 
+class EntitlementDescriptor(TypedDict, total=False):
+    provider: str
+    requires_byok: bool
+    storage_policy: str
+    exposure_policy: str
+    audit_policy: str
+    notes: str
+
+
 class ConnectorManifest(TypedDict):
     key: str
     name: str
@@ -26,6 +35,7 @@ class ConnectorManifest(TypedDict):
     runtime_compatibility_range: str
     capabilities: list[str]
     auth_schema: AuthSchemaDescriptor
+    entitlement: EntitlementDescriptor | None
     config_schema: dict[str, Any]
     resource_types: list[str]
     operations: list[OperationDefinition]

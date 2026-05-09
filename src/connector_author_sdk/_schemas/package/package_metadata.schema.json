@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.orbixal.ai/connectors/package/package_metadata.schema.json",
+  "title": "ConnectorPackageMetadata",
+  "type": "object",
+  "required": [
+    "bundle_format_version",
+    "connector_target",
+    "connector_key",
+    "connector_version",
+    "manifest_schema_version",
+    "sdk_version",
+    "runtime_compatibility_range",
+    "resource_types",
+    "operations",
+    "runtime_load",
+    "code_archive"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "bundle_format_version": {
+      "type": "string",
+      "const": "2"
+    },
+    "connector_target": {
+      "type": "string",
+      "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*$"
+    },
+    "connector_key": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[a-z0-9][a-z0-9_\\-]*$"
+    },
+    "connector_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "manifest_schema_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "sdk_version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "runtime_compatibility_range": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 64
+    },
+    "resource_types": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 128
+      }
+    },
+    "operations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "kind"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["read", "query"]
+          }
+        }
+      }
+    },
+    "runtime_load": {
+      "type": "object",
+      "required": ["entrypoint", "code_archive"],
+      "additionalProperties": false,
+      "properties": {
+        "entrypoint": {
+          "type": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_]*(\\.[A-Za-z_][A-Za-z0-9_]*)*:[A-Za-z_][A-Za-z0-9_]*$"
+        },
+        "code_archive": {
+          "type": "string",
+          "const": "connector_code.zip"
+        }
+      }
+    },
+    "code_archive": {
+      "type": "object",
+      "required": ["path", "format", "members"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "const": "connector_code.zip"
+        },
+        "format": {
+          "type": "string",
+          "const": "zip"
+        },
+        "members": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "not": {
+              "anyOf": [
+                { "pattern": "^/" },
+                { "pattern": "(^|/)\\.\\.(/|$)" },
+                { "pattern": "\\\\." }
+              ]
+            }
+          }
+        }
+      }
+    }
+  }
+}

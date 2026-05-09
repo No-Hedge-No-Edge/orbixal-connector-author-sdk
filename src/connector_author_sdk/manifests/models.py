@@ -39,6 +39,7 @@ class ConnectorManifest:
     runtime_compatibility_range: str
     capabilities: list[str] = field(default_factory=list)
     auth_schema: dict[str, Any] = field(default_factory=dict)
+    entitlement: dict[str, Any] | None = None
     config_schema: dict[str, Any] = field(default_factory=dict)
     resource_types: list[str] = field(default_factory=list)
     operations: list[OperationDefinition] = field(default_factory=list)
@@ -53,6 +54,7 @@ class ConnectorManifest:
             "runtime_compatibility_range": self.runtime_compatibility_range,
             "capabilities": list(self.capabilities),
             "auth_schema": self.auth_schema,
+            "entitlement": self.entitlement,
             "config_schema": self.config_schema,
             "resource_types": list(self.resource_types),
             "operations": [operation.to_dict() for operation in self.operations],

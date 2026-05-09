@@ -15,6 +15,13 @@ from connector_author_sdk.validation import (
 
 class ManifestValidationTests(unittest.TestCase):
     def test_manifest_build_and_validate(self) -> None:
+        entitlement = {
+            "provider": "orbixal_internal",
+            "requires_byok": False,
+            "storage_policy": "derived_internal",
+            "exposure_policy": "org_internal_only",
+            "audit_policy": "org_access_logged",
+        }
         manifest = build_manifest(
             key="github",
             name="GitHub",
@@ -27,6 +34,7 @@ class ManifestValidationTests(unittest.TestCase):
                 "type": "oauth2",
                 "required_fields": ["access_token"],
             },
+            entitlement=entitlement,
             config_schema={
                 "type": "object",
                 "properties": {"default_owner": {"type": "string"}},
@@ -56,6 +64,7 @@ class ManifestValidationTests(unittest.TestCase):
         result = validate_manifest(manifest)
         self.assertTrue(result.valid)
         self.assertEqual(result.errors, [])
+        self.assertEqual(manifest.to_dict()["entitlement"], entitlement)
 
     def test_config_validation_reports_missing_required_fields(self) -> None:
         manifest = build_manifest(

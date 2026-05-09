@@ -61,12 +61,13 @@ def _normalize_connector_result(
     raise TypeError(f"Unsupported connector result type: {type(value)!r}")
 
 
-def _result_meta(ctx: ConnectorContext, action: str) -> ResultMeta:
+def _result_meta(ctx: ConnectorContext, action: str, entitlement: dict[str, Any] | None = None) -> ResultMeta:
     return ResultMeta(
         connector_key=ctx.connector_key,
         connector_version=ctx.connector_version,
         action=action,
         request_id=ctx.execution_id,
+        entitlement=entitlement,
     )
 
 
@@ -268,6 +269,7 @@ def run_read(
     owner_id: str = "local-user",
     execution_id: str = "local-execution",
 ) -> dict[str, Any]:
+    manifest = connector.describe()
     ctx = build_context(
         connector,
         config=config,
@@ -286,7 +288,10 @@ def run_read(
             include_raw=include_raw,
         ),
     )
-    return _validated_result_payload(result, meta=_result_meta(ctx, action))
+    return _validated_result_payload(
+        result,
+        meta=_result_meta(ctx, action, entitlement=manifest.entitlement),
+    )
 
 
 def run_query(
@@ -304,6 +309,7 @@ def run_query(
     owner_id: str = "local-user",
     execution_id: str = "local-execution",
 ) -> dict[str, Any]:
+    manifest = connector.describe()
     ctx = build_context(
         connector,
         config=config,
@@ -323,7 +329,10 @@ def run_query(
             include_raw=include_raw,
         ),
     )
-    return _validated_result_payload(result, meta=_result_meta(ctx, action))
+    return _validated_result_payload(
+        result,
+        meta=_result_meta(ctx, action, entitlement=manifest.entitlement),
+    )
 
 
 __all__ = [
