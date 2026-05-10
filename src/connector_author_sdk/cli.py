@@ -23,6 +23,7 @@ from connector_author_sdk.packaging import (
     inspect_package_artifact,
     package_connector,
     verify_package_artifact,
+    write_release_gate_metadata,
 )
 from connector_author_sdk.scaffold import scaffold_connector
 
@@ -231,20 +232,126 @@ def _list_resources_command(**kwargs: Any) -> int:
     type=click.Path(exists=True, path_type=Path),
     help="Source file or package directory to include in the executable bundle. May be repeated.",
 )
-def package_command(connector: str, output_dir: str, sources: tuple[Path, ...]) -> int:
-    return _package_command(connector=connector, output_dir=output_dir, sources=sources)
+@click.option(
+    "--dependency",
+    "dependencies",
+    multiple=True,
+    help="Direct runtime dependency expression to include in sbom.json. May be repeated.",
+)
+@click.option(
+    "--signing-key-id",
+    default="local-author",
+    show_default=True,
+    help="Key identifier written to signature.json when ORBIXAL_CONNECTOR_SIGNING_SECRET is set.",
+)
+def package_command(
+    connector: str,
+    output_dir: str,
+    sources: tuple[Path, ...],
+    dependencies: tuple[str, ...],
+    signing_key_id: str,
+) -> int:
+    return _package_command(
+        connector=connector,
+        output_dir=output_dir,
+        sources=sources,
+        dependencies=dependencies,
+        signing_key_id=signing_key_id,
+    )
 
 
 @_with_error_handling
-def _package_command(*, connector: str, output_dir: str, sources: tuple[Path, ...] = ()) -> int:
+def _package_command(
+    *,
+    connector: str,
+    output_dir: str,
+    sources: tuple[Path, ...] = (),
+    dependencies: tuple[str, ...] = (),
+    signing_key_id: str = "local-author",
+) -> int:
     loaded_connector = load_connector(connector)
     artifact = package_connector(
         loaded_connector,
         connector_target=connector,
         output_dir=output_dir,
         source_paths=sources or None,
+        dependencies=dependencies,
+        signing_key_id=signing_key_id,
     )
     _emit(artifact.to_dict())
+    return 0
+
+
+@cli.command("release-metadata")
+@click.option("--package-dir", required=True, type=click.Path(exists=True, file_okay=False, path_type=Path))
+@click.option(
+    "--allowed-host",
+    "allowed_hosts",
+    multiple=True,
+    required=True,
+    help="Provider host allowed through the egress proxy. May be repeated.",
+)
+@click.option(
+    "--signing-key-id",
+    default="local-author",
+    show_default=True,
+    help="Key identifier written to signed release-gate metadata.",
+)
+@click.option(
+    "--builder-id",
+    default="orbixal-connector-author-sdk",
+    show_default=True,
+    help="Builder id written to provenance.json.",
+)
+@click.option("--source-ref", help="Optional source repository or build reference for provenance.json.")
+@click.option(
+    "--vulnerability-scanner-name",
+    default="orbixal-vulnerability-scan",
+    show_default=True,
+)
+@click.option("--malware-scanner-name", default="orbixal-malware-scan", show_default=True)
+def release_metadata_command(
+    package_dir: Path,
+    allowed_hosts: tuple[str, ...],
+    signing_key_id: str,
+    builder_id: str,
+    source_ref: str | None,
+    vulnerability_scanner_name: str,
+    malware_scanner_name: str,
+) -> int:
+    return _release_metadata_command(
+        package_dir=package_dir,
+        allowed_hosts=allowed_hosts,
+        signing_key_id=signing_key_id,
+        builder_id=builder_id,
+        source_ref=source_ref,
+        vulnerability_scanner_name=vulnerability_scanner_name,
+        malware_scanner_name=malware_scanner_name,
+    )
+
+
+@_with_error_handling
+def _release_metadata_command(
+    *,
+    package_dir: Path,
+    allowed_hosts: tuple[str, ...],
+    signing_key_id: str,
+    builder_id: str,
+    source_ref: str | None,
+    vulnerability_scanner_name: str,
+    malware_scanner_name: str,
+) -> int:
+    _emit(
+        write_release_gate_metadata(
+            package_dir,
+            allowed_hosts=allowed_hosts,
+            signing_key_id=signing_key_id,
+            builder_id=builder_id,
+            source_ref=source_ref,
+            vulnerability_scanner_name=vulnerability_scanner_name,
+            malware_scanner_name=malware_scanner_name,
+        )
+    )
     return 0
 
 

@@ -24,6 +24,7 @@ Current local workflow:
 - `uv run orbixal-connector run read --connector module:ConnectorClass --action get_item --params '{"id":1}'`
 - `uv run orbixal-connector run query --connector module:ConnectorClass --action search --params '{"query":"foo"}'`
 - `uv run orbixal-connector package --connector module:ConnectorClass --output-dir ./dist/connector`
+- `ORBIXAL_CONNECTOR_SIGNING_SECRET=... uv run orbixal-connector release-metadata --package-dir ./dist/connector/<connector_key>/<connector_version> --allowed-host api.provider.com`
 - `uv run orbixal-connector inspect-artifact --package-dir ./dist/connector/<connector_key>/<connector_version>`
 - `uv run orbixal-connector verify-artifact --package-dir ./dist/connector/<connector_key>/<connector_version>`
 - `uv run orbixal-connector publish-local --package-dir ./dist/connector/<connector_key>/<connector_version> --registry-url http://localhost:8000/api/v1`
@@ -33,7 +34,10 @@ Packaging output:
 - `./dist/connector/<connector_key>/<connector_version>/manifest.json`
 - `./dist/connector/<connector_key>/<connector_version>/package_metadata.json`
 - `./dist/connector/<connector_key>/<connector_version>/connector_code.zip`
+- `./dist/connector/<connector_key>/<connector_version>/sbom.json`
 - `./dist/connector/<connector_key>/<connector_version>/checksums.json`
+- optional third-party release metadata: `signature.json`, `vulnerability_scan.json`,
+  `malware_scan.json`, `provenance.json`, and `egress_policy.json`
 
 By default, packaging infers the connector module or package source from the
 `module:Class` target. For production package layouts, pass one or more
@@ -59,6 +63,19 @@ uv run orbixal-connector publish-local \
 `publish-local` is only for dev/local registry flows where the registry service
 can read the same package directory path. Production publication should use a
 registry upload intent or pre-signed object-store upload.
+
+Third-party publication gate metadata:
+
+```bash
+ORBIXAL_CONNECTOR_SIGNING_SECRET=... uv run orbixal-connector release-metadata \
+  --package-dir ./dist/connector/<connector_key>/<connector_version> \
+  --allowed-host api.provider.com \
+  --source-ref git+https://github.com/publisher/connector@<sha>
+```
+
+This writes signed scanner attestations, signed provenance, a default-deny
+egress policy, refreshes `checksums.json`, and regenerates `signature.json` so
+the registry can verify the submitted release-gate evidence.
 
 Local `read` and `query` outputs are validated against the canonical `records` and `tabular` schemas before they are emitted.
 

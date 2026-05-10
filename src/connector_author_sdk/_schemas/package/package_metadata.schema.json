@@ -14,7 +14,8 @@
     "resource_types",
     "operations",
     "runtime_load",
-    "code_archive"
+    "code_archive",
+    "sbom"
   ],
   "additionalProperties": false,
   "properties": {
@@ -121,6 +122,40 @@
               ]
             }
           }
+        }
+      }
+    },
+    "sbom": {
+      "type": "object",
+      "required": ["path", "format"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "const": "sbom.json"
+        },
+        "format": {
+          "type": "string",
+          "const": "cyclonedx-lite"
+        }
+      }
+    },
+    "signature": {
+      "type": "object",
+      "required": ["path", "algorithm", "signed_payload"],
+      "additionalProperties": false,
+      "properties": {
+        "path": {
+          "type": "string",
+          "const": "signature.json"
+        },
+        "algorithm": {
+          "type": "string",
+          "const": "hmac-sha256"
+        },
+        "signed_payload": {
+          "type": "string",
+          "const": "checksums.v1"
         }
       }
     }

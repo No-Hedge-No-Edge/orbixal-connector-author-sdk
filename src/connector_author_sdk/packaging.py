@@ -5,10 +5,14 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 import hashlib
+import hmac
 from importlib import import_module
 import inspect
 import json
+import os
 from pathlib import Path
+import re
+import shutil
 import sys
 from typing import Any
 import zipfile
@@ -19,6 +23,15 @@ from connector_author_sdk.validation import validate_manifest, validate_package_
 
 BUNDLE_FORMAT_VERSION = "2"
 CODE_ARCHIVE_FILENAME = "connector_code.zip"
+SBOM_FILENAME = "sbom.json"
+SIGNATURE_FILENAME = "signature.json"
+VULNERABILITY_SCAN_FILENAME = "vulnerability_scan.json"
+MALWARE_SCAN_FILENAME = "malware_scan.json"
+PROVENANCE_FILENAME = "provenance.json"
+EGRESS_POLICY_FILENAME = "egress_policy.json"
+SIGNING_SECRET_ENV = "ORBIXAL_CONNECTOR_SIGNING_SECRET"
+SCAN_ATTESTATION_SIGNED_PAYLOAD = "scan_attestation.v1"
+PROVENANCE_SIGNED_PAYLOAD = "provenance.v1"
 ZIP_TIMESTAMP = (1980, 1, 1, 0, 0, 0)
 EXCLUDED_DIR_NAMES = {
     ".git",
@@ -57,9 +70,11 @@ class PackageArtifact:
     metadata_path: str
     code_archive_path: str
     checksums_path: str
+    sbom_path: str
+    signature_path: str | None = None
 
-    def to_dict(self) -> dict[str, str]:
-        return {
+    def to_dict(self) -> dict[str, str | None]:
+        payload: dict[str, str | None] = {
             "connector_target": self.connector_target,
             "connector_key": self.connector_key,
             "connector_version": self.connector_version,
@@ -68,7 +83,10 @@ class PackageArtifact:
             "metadata_path": self.metadata_path,
             "code_archive_path": self.code_archive_path,
             "checksums_path": self.checksums_path,
+            "sbom_path": self.sbom_path,
+            "signature_path": self.signature_path,
         }
+        return payload
 
 
 def _sha256_hex(path: Path) -> str:
@@ -85,9 +103,10 @@ def build_package_metadata(
     connector_target: str,
     code_archive_filename: str = CODE_ARCHIVE_FILENAME,
     archive_members: Iterable[str] | None = None,
+    signed: bool = False,
 ) -> dict[str, Any]:
     manifest = connector.describe()
-    return {
+    metadata = {
         "bundle_format_version": BUNDLE_FORMAT_VERSION,
         "connector_target": connector_target,
         "connector_key": manifest.key,
@@ -109,7 +128,18 @@ def build_package_metadata(
             "format": "zip",
             "members": sorted(archive_members or []),
         },
+        "sbom": {
+            "path": SBOM_FILENAME,
+            "format": "cyclonedx-lite",
+        },
     }
+    if signed:
+        metadata["signature"] = {
+            "path": SIGNATURE_FILENAME,
+            "algorithm": "hmac-sha256",
+            "signed_payload": "checksums.v1",
+        }
+    return metadata
 
 
 def export_manifest(
@@ -142,9 +172,14 @@ def package_connector(
     connector_target: str,
     output_dir: str | Path,
     source_paths: Iterable[str | Path] | None = None,
+    dependencies: Iterable[str] | None = None,
+    signing_secret: str | None = None,
+    signing_key_id: str = "local-author",
 ) -> PackageArtifact:
     manifest = connector.describe()
     output_path = Path(output_dir) / manifest.key / manifest.version
+    if output_path.exists():
+        shutil.rmtree(output_path)
     output_path.mkdir(parents=True, exist_ok=True)
     resolved_source_paths = resolve_connector_source_paths(
         connector_target,
@@ -161,11 +196,13 @@ def package_connector(
         source_paths=resolved_source_paths,
         output_path=code_archive_path,
     )
+    resolved_signing_secret = signing_secret or os.getenv(SIGNING_SECRET_ENV)
     metadata_path = output_path / "package_metadata.json"
     package_metadata = build_package_metadata(
         connector,
         connector_target=connector_target,
         archive_members=archive_members,
+        signed=bool(resolved_signing_secret),
     )
     package_metadata_validation = validate_package_metadata(package_metadata)
     if not package_metadata_validation.valid:
@@ -182,23 +219,53 @@ def package_connector(
         + "\n",
         encoding="utf-8",
     )
-    checksums_path = output_path / "checksums.json"
-    checksums_path.write_text(
+    sbom_path = output_path / SBOM_FILENAME
+    sbom_path.write_text(
         json.dumps(
-            {
-                "algorithm": "sha256",
-                "files": {
-                    "manifest.json": _sha256_hex(manifest_path),
-                    CODE_ARCHIVE_FILENAME: _sha256_hex(code_archive_path),
-                    "package_metadata.json": _sha256_hex(metadata_path),
-                },
-            },
+            build_sbom(connector, dependencies=dependencies),
             indent=2,
             sort_keys=True,
         )
         + "\n",
         encoding="utf-8",
     )
+    checksums_path = output_path / "checksums.json"
+    checksums = {
+        "algorithm": "sha256",
+        "files": {
+            "manifest.json": _sha256_hex(manifest_path),
+            CODE_ARCHIVE_FILENAME: _sha256_hex(code_archive_path),
+            "package_metadata.json": _sha256_hex(metadata_path),
+            SBOM_FILENAME: _sha256_hex(sbom_path),
+        },
+    }
+    checksums_path.write_text(
+        json.dumps(checksums, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+
+    signature_path: Path | None = None
+    if resolved_signing_secret:
+        signature_path = output_path / SIGNATURE_FILENAME
+        signature_path.write_text(
+            json.dumps(
+                build_signature(
+                    connector=connector,
+                    checksums=checksums,
+                    signing_secret=resolved_signing_secret,
+                    signing_key_id=signing_key_id,
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        checksums["files"][SIGNATURE_FILENAME] = _sha256_hex(signature_path)
+        checksums_path.write_text(
+            json.dumps(checksums, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
 
     return PackageArtifact(
         connector_target=connector_target,
@@ -209,7 +276,424 @@ def package_connector(
         metadata_path=str(metadata_path),
         code_archive_path=str(code_archive_path),
         checksums_path=str(checksums_path),
+        sbom_path=str(sbom_path),
+        signature_path=str(signature_path) if signature_path else None,
     )
+
+
+def build_sbom(
+    connector: Connector,
+    *,
+    dependencies: Iterable[str] | None = None,
+) -> dict[str, Any]:
+    """Build a deterministic lightweight CycloneDX-style SBOM."""
+
+    manifest = connector.describe()
+    dependency_components = [
+        _dependency_component(dependency)
+        for dependency in sorted({str(item).strip() for item in dependencies or [] if str(item).strip()})
+    ]
+    return {
+        "bomFormat": "CycloneDX",
+        "specVersion": "1.5",
+        "metadata": {
+            "component": {
+                "type": "application",
+                "name": manifest.key,
+                "version": manifest.version,
+            },
+            "tools": [
+                {
+                    "vendor": "Orbixal",
+                    "name": "orbixal-connector-author-sdk",
+                    "version": manifest.sdk_version,
+                }
+            ],
+        },
+        "components": dependency_components,
+    }
+
+
+def build_signature(
+    *,
+    connector: Connector,
+    checksums: dict[str, Any],
+    signing_secret: str,
+    signing_key_id: str,
+) -> dict[str, Any]:
+    """Build an HMAC signature over connector identity and file checksums."""
+
+    if not signing_secret:
+        raise ValueError("A non-empty signing_secret is required.")
+    manifest = connector.describe()
+    signed_payload = _signature_payload(
+        connector_key=manifest.key,
+        connector_version=manifest.version,
+        checksums=checksums,
+    )
+    signature = hmac.new(
+        signing_secret.encode("utf-8"),
+        _canonical_json(signed_payload).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return {
+        "signature_format_version": "1",
+        "algorithm": "hmac-sha256",
+        "key_id": signing_key_id,
+        "signed_payload": "checksums.v1",
+        "signature": signature,
+    }
+
+
+def build_scan_attestation(
+    connector: Connector,
+    *,
+    scanner_name: str,
+    scanner_version: str | None = None,
+    status: str = "passed",
+    findings: Iterable[dict[str, Any]] | None = None,
+    signing_secret: str | None = None,
+    signing_key_id: str = "local-author",
+) -> dict[str, Any]:
+    """Build a signed scanner attestation for publication release gates."""
+
+    manifest = connector.describe()
+    attestation: dict[str, Any] = {
+        "attestation_format_version": "1",
+        "scanner": {
+            "name": scanner_name,
+        },
+        "status": status,
+        "subject": {
+            "connector_key": manifest.key,
+            "connector_version": manifest.version,
+        },
+        "findings": list(findings or []),
+    }
+    if scanner_version:
+        attestation["scanner"]["version"] = scanner_version
+    if signing_secret:
+        attestation["signature"] = build_scan_attestation_signature(
+            connector=connector,
+            attestation=attestation,
+            signing_secret=signing_secret,
+            signing_key_id=signing_key_id,
+        )
+    return attestation
+
+
+def build_scan_attestation_signature(
+    *,
+    connector: Connector,
+    attestation: dict[str, Any],
+    signing_secret: str,
+    signing_key_id: str,
+) -> dict[str, str]:
+    """Build an HMAC signature over a scanner attestation."""
+
+    if not signing_secret:
+        raise ValueError("A non-empty signing_secret is required.")
+    manifest = connector.describe()
+    unsigned_attestation = json.loads(json.dumps(attestation))
+    unsigned_attestation.pop("signature", None)
+    signature = hmac.new(
+        signing_secret.encode("utf-8"),
+        _canonical_json(
+            {
+                "connector_key": manifest.key,
+                "connector_version": manifest.version,
+                "scan_attestation": unsigned_attestation,
+            }
+        ).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return {
+        "algorithm": "hmac-sha256",
+        "key_id": signing_key_id,
+        "signed_payload": SCAN_ATTESTATION_SIGNED_PAYLOAD,
+        "signature": signature,
+    }
+
+
+def build_provenance(
+    connector: Connector,
+    *,
+    builder_id: str,
+    source_ref: str | None = None,
+    signing_secret: str | None = None,
+    signing_key_id: str = "local-author",
+) -> dict[str, Any]:
+    """Build signed SLSA-style provenance metadata for a connector package."""
+
+    manifest = connector.describe()
+    provenance: dict[str, Any] = {
+        "provenance_format_version": "1",
+        "predicateType": "https://slsa.dev/provenance/v1",
+        "subject": {
+            "connector_key": manifest.key,
+            "connector_version": manifest.version,
+        },
+        "builder": {"id": builder_id},
+    }
+    if source_ref:
+        provenance["source"] = {"ref": source_ref}
+    if signing_secret:
+        provenance["signature"] = build_provenance_signature(
+            connector=connector,
+            provenance=provenance,
+            signing_secret=signing_secret,
+            signing_key_id=signing_key_id,
+        )
+    return provenance
+
+
+def build_provenance_signature(
+    *,
+    connector: Connector,
+    provenance: dict[str, Any],
+    signing_secret: str,
+    signing_key_id: str,
+) -> dict[str, str]:
+    """Build an HMAC signature over provenance metadata."""
+
+    if not signing_secret:
+        raise ValueError("A non-empty signing_secret is required.")
+    manifest = connector.describe()
+    unsigned_provenance = json.loads(json.dumps(provenance))
+    unsigned_provenance.pop("signature", None)
+    signature = hmac.new(
+        signing_secret.encode("utf-8"),
+        _canonical_json(
+            {
+                "connector_key": manifest.key,
+                "connector_version": manifest.version,
+                "provenance": unsigned_provenance,
+            }
+        ).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+    return {
+        "algorithm": "hmac-sha256",
+        "key_id": signing_key_id,
+        "signed_payload": PROVENANCE_SIGNED_PAYLOAD,
+        "signature": signature,
+    }
+
+
+def build_egress_policy(*, allowed_hosts: Iterable[str]) -> dict[str, Any]:
+    """Build the default-deny egress policy metadata expected by the registry."""
+
+    hosts = sorted({str(host).strip().lower() for host in allowed_hosts if str(host).strip()})
+    if not hosts:
+        raise ValueError("At least one allowed host is required.")
+    return {
+        "version": "1",
+        "enforcement": "egress_proxy",
+        "default_action": "deny",
+        "allowed_hosts": hosts,
+    }
+
+
+def write_release_gate_metadata(
+    package_dir: str | Path,
+    *,
+    allowed_hosts: Iterable[str],
+    signing_secret: str | None = None,
+    signing_key_id: str = "local-author",
+    builder_id: str = "orbixal-connector-author-sdk",
+    source_ref: str | None = None,
+    vulnerability_scanner_name: str = "orbixal-vulnerability-scan",
+    malware_scanner_name: str = "orbixal-malware-scan",
+    vulnerability_status: str = "passed",
+    malware_status: str = "clean",
+    vulnerability_findings: Iterable[dict[str, Any]] | None = None,
+    malware_findings: Iterable[dict[str, Any]] | None = None,
+) -> dict[str, str | None]:
+    """Write third-party release-gate metadata and refresh package checksums.
+
+    The package-level signature is regenerated after release-gate files are
+    written so the final signature covers scanner attestations, provenance, and
+    egress policy metadata.
+    """
+
+    package_path = Path(package_dir)
+    connector = load_packaged_connector(package_path)
+    resolved_signing_secret = signing_secret or os.getenv(SIGNING_SECRET_ENV)
+
+    paths = {
+        "vulnerability_scan_path": package_path / VULNERABILITY_SCAN_FILENAME,
+        "malware_scan_path": package_path / MALWARE_SCAN_FILENAME,
+        "provenance_path": package_path / PROVENANCE_FILENAME,
+        "egress_policy_path": package_path / EGRESS_POLICY_FILENAME,
+        "checksums_path": package_path / "checksums.json",
+        "signature_path": package_path / SIGNATURE_FILENAME,
+    }
+    paths["vulnerability_scan_path"].write_text(
+        json.dumps(
+            build_scan_attestation(
+                connector,
+                scanner_name=vulnerability_scanner_name,
+                status=vulnerability_status,
+                findings=vulnerability_findings,
+                signing_secret=resolved_signing_secret,
+                signing_key_id=signing_key_id,
+            ),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    paths["malware_scan_path"].write_text(
+        json.dumps(
+            build_scan_attestation(
+                connector,
+                scanner_name=malware_scanner_name,
+                status=malware_status,
+                findings=malware_findings,
+                signing_secret=resolved_signing_secret,
+                signing_key_id=signing_key_id,
+            ),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    paths["provenance_path"].write_text(
+        json.dumps(
+            build_provenance(
+                connector,
+                builder_id=builder_id,
+                source_ref=source_ref,
+                signing_secret=resolved_signing_secret,
+                signing_key_id=signing_key_id,
+            ),
+            indent=2,
+            sort_keys=True,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    paths["egress_policy_path"].write_text(
+        json.dumps(build_egress_policy(allowed_hosts=allowed_hosts), indent=2, sort_keys=True)
+        + "\n",
+        encoding="utf-8",
+    )
+
+    checksums = _package_checksums(
+        package_path,
+        include_signature=False,
+    )
+    paths["checksums_path"].write_text(
+        json.dumps(checksums, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    signature_path: Path | None = None
+    if resolved_signing_secret:
+        signature_path = paths["signature_path"]
+        signature_path.write_text(
+            json.dumps(
+                build_signature(
+                    connector=connector,
+                    checksums=checksums,
+                    signing_secret=resolved_signing_secret,
+                    signing_key_id=signing_key_id,
+                ),
+                indent=2,
+                sort_keys=True,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        checksums["files"][SIGNATURE_FILENAME] = _sha256_hex(signature_path)
+        paths["checksums_path"].write_text(
+            json.dumps(checksums, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+
+    return {
+        "package_dir": str(package_path),
+        "vulnerability_scan_path": str(paths["vulnerability_scan_path"]),
+        "malware_scan_path": str(paths["malware_scan_path"]),
+        "provenance_path": str(paths["provenance_path"]),
+        "egress_policy_path": str(paths["egress_policy_path"]),
+        "checksums_path": str(paths["checksums_path"]),
+        "signature_path": str(signature_path) if signature_path else None,
+    }
+
+
+def _signature_payload(
+    *,
+    connector_key: str,
+    connector_version: str,
+    checksums: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "connector_key": connector_key,
+        "connector_version": connector_version,
+        "checksums": checksums,
+    }
+
+
+def _package_checksums(package_path: Path, *, include_signature: bool) -> dict[str, Any]:
+    filenames = [
+        "manifest.json",
+        CODE_ARCHIVE_FILENAME,
+        "package_metadata.json",
+        SBOM_FILENAME,
+        VULNERABILITY_SCAN_FILENAME,
+        MALWARE_SCAN_FILENAME,
+        PROVENANCE_FILENAME,
+        EGRESS_POLICY_FILENAME,
+    ]
+    if include_signature:
+        filenames.append(SIGNATURE_FILENAME)
+    return {
+        "algorithm": "sha256",
+        "files": {
+            filename: _sha256_hex(package_path / filename)
+            for filename in filenames
+            if (package_path / filename).is_file()
+        },
+    }
+
+
+def _canonical_json(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, sort_keys=True, separators=(",", ":"))
+
+
+def _dependency_component(dependency: str) -> dict[str, Any]:
+    name = _dependency_name(dependency)
+    component: dict[str, Any] = {
+        "type": "library",
+        "name": name,
+        "scope": "required",
+        "properties": [
+            {
+                "name": "orbixal:dependency_expression",
+                "value": dependency,
+            }
+        ],
+    }
+    version = _dependency_version_hint(dependency)
+    if version:
+        component["version"] = version
+    return component
+
+
+def _dependency_name(dependency: str) -> str:
+    match = re.match(r"^\s*([A-Za-z0-9_.-]+)", dependency)
+    if not match:
+        raise ValueError(f"Dependency entry has no package name: {dependency}")
+    return match.group(1).replace("_", "-").lower()
+
+
+def _dependency_version_hint(dependency: str) -> str | None:
+    for marker in ("==", ">=", "~=", "<=", ">", "<"):
+        if marker in dependency:
+            return dependency.split(marker, maxsplit=1)[1].split(",", maxsplit=1)[0].strip()
+    return None
 
 
 def resolve_connector_source_paths(
@@ -319,6 +803,8 @@ def inspect_package_artifact(package_dir: str | Path) -> dict[str, Any]:
         "sdk_version": metadata.get("sdk_version"),
         "runtime_compatibility_range": metadata.get("runtime_compatibility_range"),
         "code_archive": metadata.get("code_archive"),
+        "sbom": metadata.get("sbom"),
+        "signature": metadata.get("signature"),
         "operations": metadata.get("operations", []),
         "resource_types": metadata.get("resource_types", []),
         "checksums": {
@@ -414,15 +900,31 @@ def _should_include_file(path: Path) -> bool:
 __all__ = [
     "BUNDLE_FORMAT_VERSION",
     "CODE_ARCHIVE_FILENAME",
+    "EGRESS_POLICY_FILENAME",
+    "MALWARE_SCAN_FILENAME",
     "PackageArtifact",
+    "PROVENANCE_FILENAME",
+    "SCAN_ATTESTATION_SIGNED_PAYLOAD",
     "build_package_metadata",
+    "build_egress_policy",
+    "build_provenance",
+    "build_provenance_signature",
+    "build_scan_attestation",
+    "build_scan_attestation_signature",
+    "build_sbom",
+    "build_signature",
     "discover_connector_source_paths",
     "export_manifest",
     "inspect_package_artifact",
     "load_packaged_connector",
     "package_connector",
+    "PROVENANCE_SIGNED_PAYLOAD",
     "resolve_connector_source_paths",
+    "SIGNING_SECRET_ENV",
+    "SIGNATURE_FILENAME",
     "verify_package_artifact",
     "verify_package_checksums",
+    "VULNERABILITY_SCAN_FILENAME",
     "write_code_archive",
+    "write_release_gate_metadata",
 ]

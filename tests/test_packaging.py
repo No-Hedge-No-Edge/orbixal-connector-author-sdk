@@ -14,6 +14,7 @@ from connector_author_sdk.packaging import (
     package_connector,
     verify_package_artifact,
     verify_package_checksums,
+    write_release_gate_metadata,
 )
 
 
@@ -21,7 +22,7 @@ TESTS_DIR = Path(__file__).resolve().parent
 if str(TESTS_DIR) not in sys.path:
     sys.path.insert(0, str(TESTS_DIR))
 
-from fake_connector import FakeConnector
+from fake_connector import FakeConnector  # noqa: E402
 
 
 class PackagingTests(unittest.TestCase):
@@ -80,6 +81,46 @@ class PackagingTests(unittest.TestCase):
             inspected = inspect_package_artifact(artifact.output_dir)
             self.assertEqual(inspected["connector_key"], "fake")
             self.assertIn(CODE_ARCHIVE_FILENAME, inspected["checksums"]["files"])
+
+    def test_write_release_gate_metadata_refreshes_checksums_and_signature(self) -> None:
+        with TemporaryDirectory() as tmp_dir:
+            artifact = package_connector(
+                FakeConnector(),
+                connector_target="fake_connector:FakeConnector",
+                output_dir=tmp_dir,
+                signing_secret="secret",
+                signing_key_id="test",
+            )
+
+            metadata = write_release_gate_metadata(
+                artifact.output_dir,
+                allowed_hosts=["api.example.com"],
+                signing_secret="secret",
+                signing_key_id="test",
+                source_ref="git+https://github.com/orbixal/fake@abc123",
+            )
+
+            verify_package_checksums(artifact.output_dir)
+            for path_key in (
+                "vulnerability_scan_path",
+                "malware_scan_path",
+                "provenance_path",
+                "egress_policy_path",
+                "signature_path",
+            ):
+                self.assertTrue(Path(str(metadata[path_key])).is_file())
+
+            vulnerability_scan = json.loads(
+                Path(str(metadata["vulnerability_scan_path"])).read_text(encoding="utf-8")
+            )
+            provenance = json.loads(
+                Path(str(metadata["provenance_path"])).read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                vulnerability_scan["signature"]["signed_payload"],
+                "scan_attestation.v1",
+            )
+            self.assertEqual(provenance["signature"]["signed_payload"], "provenance.v1")
 
     def test_load_packaged_connector_from_code_archive(self) -> None:
         with TemporaryDirectory() as tmp_dir:
