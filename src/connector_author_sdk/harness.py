@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 from importlib import import_module
 from inspect import isclass
-from typing import Any, Mapping
+from typing import Any
 
 from connector_author_sdk.connector import Connector
 from connector_author_sdk.context import AuthContext, ConnectorContext
@@ -15,8 +16,8 @@ from connector_author_sdk.results import (
     QueryRequest,
     ReadRequest,
     RecordsResult,
-    ResultMeta,
     ResourcePage,
+    ResultMeta,
     TabularResult,
 )
 from connector_author_sdk.validation import (
@@ -147,6 +148,8 @@ def build_context(
     owner_id: str = "local-user",
     execution_id: str = "local-execution",
     http: Any | None = None,
+    platform_http: Any | None = None,
+    project_id: str | None = None,
 ) -> ConnectorContext:
     manifest = connector.describe()
     resolved_auth_payload = _ensure_mapping(auth_payload)
@@ -163,6 +166,8 @@ def build_context(
             values=resolved_auth_payload,
         ),
         http=http or SimpleHttpClient(),
+        platform_http=platform_http,
+        project_id=project_id,
         execution_id=execution_id,
     )
 

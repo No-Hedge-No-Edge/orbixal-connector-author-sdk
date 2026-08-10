@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 
 
 class LoggerProtocol(Protocol):
@@ -41,6 +42,19 @@ class HttpClientProtocol(Protocol):
         timeout: float | None = None,
     ) -> HttpResponseProtocol: ...
 
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        params: Mapping[str, Any] | None = None,
+        json: Mapping[str, Any] | None = None,
+        data: Any = None,
+        timeout: float | None = None,
+    ) -> HttpResponseProtocol: ...
+
+
     def post(
         self,
         url: str,
@@ -50,6 +64,10 @@ class HttpClientProtocol(Protocol):
         data: Any = None,
         timeout: float | None = None,
     ) -> HttpResponseProtocol: ...
+
+
+class PlatformHttpClientProtocol(HttpClientProtocol, Protocol):
+    """Runtime-controlled client for first-party internal platform APIs."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -76,4 +94,6 @@ class ConnectorContext:
     auth: AuthContext = field(default_factory=lambda: AuthContext(auth_type="none"))
     logger: LoggerProtocol | None = None
     http: HttpClientProtocol | None = None
+    platform_http: PlatformHttpClientProtocol | None = None
+    project_id: str | None = None
     execution_id: str = ""

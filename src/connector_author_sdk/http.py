@@ -2,15 +2,16 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from time import perf_counter
-from typing import Any, Mapping
+from typing import Any, Self
 from urllib.parse import urlparse
 
 import httpx
 
 from connector_author_sdk.errors import ProviderUnavailableError
-
 
 DEFAULT_USER_AGENT = "orbixal-connector-author-sdk/0.1.1"
 
@@ -47,6 +48,35 @@ class SimpleHttpClient:
         self.user_agent = user_agent
         self._client = httpx.Client(headers={"User-Agent": user_agent})
         self._provider_telemetry: list[ProviderHttpTelemetry] = []
+
+    def __enter__(self) -> Self:
+        return self
+
+    def __exit__(self, exc_type: object, exc: object, traceback: object) -> None:
+        self._client.close()
+
+    def request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        params: Mapping[str, Any] | None = None,
+        json: Mapping[str, Any] | None = None,
+        data: Any = None,
+        timeout: float | None = None,
+        provider: str | None = None,
+    ) -> SimpleHttpResponse:
+        return self._request(
+            method,
+            url,
+            headers=headers,
+            params=params,
+            json=json,
+            data=data,
+            timeout=timeout,
+            provider=provider,
+        )
 
     def get(
         self,
@@ -150,6 +180,117 @@ class SimpleHttpClient:
         return events
 
 
+class SimplePlatformHttpClient(SimpleHttpClient):
+    """Pinned-origin client backed by a rotating execution access grant."""
+
+    def __init__(
+        self,
+        *,
+        access_token: str,
+        token_expires_at: str,
+        renewal_url: str,
+        renewal_handle: str,
+        absolute_expires_at: str,
+        audience: str,
+        service_base_url: str,
+        project_id: str,
+        renewal_skew_seconds: int = 60,
+    ) -> None:
+        super().__init__()
+        self._access_token = _required(access_token, "access_token")
+        self._token_expires_at = _parse_datetime(token_expires_at)
+        self._renewal_url = _absolute_https_url(renewal_url, "renewal_url")
+        self._renewal_handle = _required(renewal_handle, "renewal_handle")
+        self._absolute_expires_at = _parse_datetime(absolute_expires_at)
+        self._audience = _required(audience, "audience")
+        self._service_base_url = _absolute_https_url(
+            service_base_url, "service_base_url"
+        ).rstrip("/")
+        self._project_id = _required(project_id, "project_id")
+        self._renewal_skew = timedelta(seconds=max(renewal_skew_seconds, 0))
+
+    def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        params: Mapping[str, Any] | None = None,
+        json: Mapping[str, Any] | None = None,
+        data: Any = None,
+        timeout: float | None = None,
+        provider: str | None = None,
+    ) -> SimpleHttpResponse:
+        request_url = self._resolve_path(url)
+        self._renew_if_needed()
+        supplied_headers = {key.lower(): value for key, value in (headers or {}).items()}
+        if "authorization" in supplied_headers or "x-orbixal-project-id" in supplied_headers:
+            raise ValueError("Platform authorization and project headers are runtime-owned.")
+        runtime_headers = {
+            **dict(headers or {}),
+            "Authorization": f"Bearer {self._access_token}",
+            "X-Orbixal-Project-Id": self._project_id,
+        }
+        return super()._request(
+            method,
+            request_url,
+            headers=runtime_headers,
+            params=params,
+            json=json,
+            data=data,
+            timeout=timeout,
+            provider=provider or "orbixal-platform",
+        )
+
+    def _resolve_path(self, path: str) -> str:
+        parsed = urlparse(path)
+        if parsed.scheme or parsed.netloc or not path.startswith("/"):
+            raise ValueError("Platform HTTP requests require an absolute path, not a URL.")
+        return f"{self._service_base_url}{path}"
+
+    def _renew_if_needed(self) -> None:
+        now = datetime.now(UTC)
+        if now + self._renewal_skew < self._token_expires_at:
+            return
+        if now >= self._absolute_expires_at:
+            raise ProviderUnavailableError(
+                message="Connector execution platform access expired.",
+                url=self._renewal_url,
+                method="POST",
+            )
+        response = self._client.post(
+            self._renewal_url,
+            json={"renewal_handle": self._renewal_handle},
+            timeout=10.0,
+        )
+        if response.status_code != 200:
+            raise ProviderUnavailableError(
+                message="Connector execution platform access renewal failed.",
+                url=self._renewal_url,
+                method="POST",
+            )
+        payload = response.json()
+        if (
+            not isinstance(payload, dict)
+            or payload.get("audience") != self._audience
+            or str(payload.get("service_base_url") or "").rstrip("/")
+            != self._service_base_url
+            or _parse_datetime(str(payload.get("absolute_expires_at") or ""))
+            != self._absolute_expires_at
+            or str(payload.get("renewal_url") or "") != self._renewal_url
+        ):
+            raise ProviderUnavailableError(
+                message="Connector execution platform access renewal changed its scope.",
+                url=self._renewal_url,
+                method="POST",
+            )
+        self._access_token = _required(str(payload.get("access_token") or ""), "access_token")
+        self._token_expires_at = _parse_datetime(str(payload.get("token_expires_at") or ""))
+        self._renewal_handle = _required(
+            str(payload.get("renewal_handle") or ""), "renewal_handle"
+        )
+
+
 def _provider_label(provider: str | None, url: str) -> str:
     if provider and provider.strip():
         return provider.strip()
@@ -167,4 +308,33 @@ def _status_outcome(status_code: int) -> str:
     return "other"
 
 
-__all__ = ["DEFAULT_USER_AGENT", "ProviderHttpTelemetry", "SimpleHttpClient", "SimpleHttpResponse"]
+def _required(value: str, name: str) -> str:
+    if not value.strip():
+        raise ValueError(f"{name} is required")
+    return value
+
+
+def _parse_datetime(value: str) -> datetime:
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError as exc:
+        raise ValueError("Platform access timestamp is invalid") from exc
+    if parsed.tzinfo is None:
+        raise ValueError("Platform access timestamp must include a timezone")
+    return parsed.astimezone(UTC)
+
+
+def _absolute_https_url(value: str, name: str) -> str:
+    parsed = urlparse(value)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise ValueError(f"{name} must be an absolute HTTPS URL")
+    return value
+
+
+__all__ = [
+    "DEFAULT_USER_AGENT",
+    "ProviderHttpTelemetry",
+    "SimpleHttpClient",
+    "SimpleHttpResponse",
+    "SimplePlatformHttpClient",
+]
