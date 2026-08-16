@@ -2,6 +2,7 @@ import unittest
 
 from connector_author_sdk.manifests import (
     build_manifest,
+    no_egress,
     oauth2_auth,
     query_operation,
     read_operation,
@@ -35,6 +36,7 @@ class ManifestValidationTests(unittest.TestCase):
                 "required_fields": ["access_token"],
             },
             entitlement=entitlement,
+            egress_policy=no_egress(),
             config_schema={
                 "type": "object",
                 "properties": {"default_owner": {"type": "string"}},
@@ -76,6 +78,7 @@ class ManifestValidationTests(unittest.TestCase):
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get"],
             auth_schema={"type": "none"},
+            egress_policy=no_egress(),
             config_schema={
                 "type": "object",
                 "properties": {"default_owner": {"type": "string"}},
@@ -104,6 +107,7 @@ class ManifestValidationTests(unittest.TestCase):
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get"],
             auth_schema=oauth2_auth(provider="github", default_scopes=["repo"]),
+            egress_policy=no_egress(),
             config_schema={"type": "object"},
             resource_types=["issue"],
             operations=[read_operation(name="get_issue", input_schema={"type": "object"})],
@@ -135,6 +139,7 @@ class ManifestValidationTests(unittest.TestCase):
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get"],
             auth_schema=oauth2_auth(required_fields=["token"]),
+            egress_policy=no_egress(),
             config_schema={"type": "object"},
             resource_types=["issue"],
             operations=[read_operation(name="get_issue", input_schema={"type": "object"})],
@@ -157,6 +162,7 @@ class ManifestValidationTests(unittest.TestCase):
                 **oauth2_auth(),
                 "client_secret": "do-not-ship",
             },
+            egress_policy=no_egress(),
             config_schema={"type": "object"},
             resource_types=["issue"],
             operations=[read_operation(name="get_issue", input_schema={"type": "object"})],
@@ -180,6 +186,7 @@ class ManifestValidationTests(unittest.TestCase):
                 "client_id": "backend-managed",
                 "callback_url": "https://example.com/callback",
             },
+            egress_policy=no_egress(),
             config_schema={"type": "object"},
             resource_types=["issue"],
             operations=[read_operation(name="get_issue", input_schema={"type": "object"})],
@@ -202,6 +209,7 @@ class ManifestValidationTests(unittest.TestCase):
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get"],
             auth_schema=oauth2_auth(),
+            egress_policy=no_egress(),
             config_schema={"type": "object"},
             resource_types=["issue"],
             operations=[read_operation(name="get_issue", input_schema={"type": "object"})],

@@ -78,18 +78,28 @@ Use `build_manifest`, `read_operation`, `query_operation`, and auth helpers from
 Example:
 
 ```python
-from connector_author_sdk import build_manifest, oauth2_auth, read_operation, query_operation
+from connector_author_sdk import (
+    build_manifest,
+    oauth2_auth,
+    provider_egress,
+    query_operation,
+    read_operation,
+)
 
 def describe(self):
     return build_manifest(
         key="github_internal",
         name="GitHub Internal",
-        version="0.1.1",
+        version="0.1.2",
         manifest_schema_version="2026-01",
-        sdk_version="0.1.1",
+        sdk_version="0.1.2",
         runtime_compatibility_range=">=1.0,<2.0",
         capabilities=["record_get", "search", "resource_list"],
         auth_schema=oauth2_auth(provider="github", default_scopes=["repo", "read:user"]),
+        egress_policy=provider_egress(
+            allowed_hosts=["api.github.com"],
+            allowed_methods=["GET"],
+        ),
         config_schema={
             "type": "object",
             "properties": {
@@ -123,6 +133,10 @@ def describe(self):
         ],
     )
 ```
+
+The egress policy is mandatory. Use `no_egress()` for connectors that never call
+an external provider. Use `provider_egress()` with exact HTTPS hostnames and the
+smallest required method and path set for internet-dependent connectors.
 
 Canonical manifest validation is provided by `src/connector_author_sdk/validation.py`.
 

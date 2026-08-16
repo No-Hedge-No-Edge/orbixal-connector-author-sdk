@@ -71,6 +71,7 @@ class PackageArtifact:
     code_archive_path: str
     checksums_path: str
     sbom_path: str
+    egress_policy_path: str
     signature_path: str | None = None
 
     def to_dict(self) -> dict[str, str | None]:
@@ -84,6 +85,7 @@ class PackageArtifact:
             "code_archive_path": self.code_archive_path,
             "checksums_path": self.checksums_path,
             "sbom_path": self.sbom_path,
+            "egress_policy_path": self.egress_policy_path,
             "signature_path": self.signature_path,
         }
         return payload
@@ -229,6 +231,11 @@ def package_connector(
         + "\n",
         encoding="utf-8",
     )
+    egress_policy_path = output_path / EGRESS_POLICY_FILENAME
+    egress_policy_path.write_text(
+        json.dumps(manifest.egress_policy.to_dict(), indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
     checksums_path = output_path / "checksums.json"
     checksums = {
         "algorithm": "sha256",
@@ -237,6 +244,7 @@ def package_connector(
             CODE_ARCHIVE_FILENAME: _sha256_hex(code_archive_path),
             "package_metadata.json": _sha256_hex(metadata_path),
             SBOM_FILENAME: _sha256_hex(sbom_path),
+            EGRESS_POLICY_FILENAME: _sha256_hex(egress_policy_path),
         },
     }
     checksums_path.write_text(
@@ -277,6 +285,7 @@ def package_connector(
         code_archive_path=str(code_archive_path),
         checksums_path=str(checksums_path),
         sbom_path=str(sbom_path),
+        egress_policy_path=str(egress_policy_path),
         signature_path=str(signature_path) if signature_path else None,
     )
 
@@ -488,16 +497,20 @@ def build_egress_policy(*, allowed_hosts: Iterable[str]) -> dict[str, Any]:
         raise ValueError("At least one allowed host is required.")
     return {
         "version": "1",
+        "mode": "provider_proxy",
         "enforcement": "egress_proxy",
         "default_action": "deny",
         "allowed_hosts": hosts,
+        "allowed_methods": ["GET"],
+        "allowed_ports": [443],
+        "allowed_path_prefixes": [],
     }
 
 
 def write_release_gate_metadata(
     package_dir: str | Path,
     *,
-    allowed_hosts: Iterable[str],
+    allowed_hosts: Iterable[str] = (),
     signing_secret: str | None = None,
     signing_key_id: str = "local-author",
     builder_id: str = "orbixal-connector-author-sdk",
@@ -518,6 +531,14 @@ def write_release_gate_metadata(
 
     package_path = Path(package_dir)
     connector = load_packaged_connector(package_path)
+    declared_policy = connector.describe().egress_policy.to_dict()
+    supplied_hosts = sorted(
+        {str(host).strip().lower().rstrip(".") for host in allowed_hosts if str(host).strip()}
+    )
+    if supplied_hosts and supplied_hosts != declared_policy["allowed_hosts"]:
+        raise ValueError(
+            "--allowed-host values must exactly match the connector manifest egress policy."
+        )
     resolved_signing_secret = signing_secret or os.getenv(SIGNING_SECRET_ENV)
 
     paths = {
@@ -576,7 +597,7 @@ def write_release_gate_metadata(
         encoding="utf-8",
     )
     paths["egress_policy_path"].write_text(
-        json.dumps(build_egress_policy(allowed_hosts=allowed_hosts), indent=2, sort_keys=True)
+        json.dumps(declared_policy, indent=2, sort_keys=True)
         + "\n",
         encoding="utf-8",
     )

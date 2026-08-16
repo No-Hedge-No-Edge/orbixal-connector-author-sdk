@@ -288,8 +288,7 @@ def _package_command(
     "--allowed-host",
     "allowed_hosts",
     multiple=True,
-    required=True,
-    help="Provider host allowed through the egress proxy. May be repeated.",
+    help="Optional assertion that must exactly match the manifest egress hosts.",
 )
 @click.option(
     "--signing-key-id",

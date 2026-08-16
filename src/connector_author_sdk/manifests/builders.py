@@ -6,8 +6,55 @@ from typing import Any
 
 from connector_author_sdk.manifests.models import (
     ConnectorManifest,
+    EgressPolicy,
     OperationDefinition,
 )
+
+_HTTP_METHODS = frozenset({"DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"})
+
+
+def no_egress() -> EgressPolicy:
+    """Declare that connector code requires no external provider access."""
+
+    return EgressPolicy()
+
+
+def provider_egress(
+    *,
+    allowed_hosts: list[str],
+    allowed_methods: list[str] | None = None,
+    allowed_ports: list[int] | None = None,
+    allowed_path_prefixes: list[str] | None = None,
+) -> EgressPolicy:
+    """Declare default-deny provider access enforced by the egress gateway."""
+
+    hosts = sorted({_normalize_host(host) for host in allowed_hosts})
+    if not hosts:
+        raise ValueError("provider_egress requires at least one allowed host.")
+    methods = sorted({method.upper().strip() for method in (allowed_methods or ["GET"])})
+    unsupported = set(methods) - _HTTP_METHODS
+    if unsupported:
+        raise ValueError(f"Unsupported egress methods: {sorted(unsupported)}")
+    ports = sorted(set(allowed_ports or [443]))
+    if any(port < 1 or port > 65535 for port in ports):
+        raise ValueError("Egress ports must be between 1 and 65535.")
+    path_prefixes = sorted(set(allowed_path_prefixes or []))
+    if any(not prefix.startswith("/") for prefix in path_prefixes):
+        raise ValueError("Egress path prefixes must start with '/'.")
+    return EgressPolicy(
+        mode="provider_proxy",
+        allowed_hosts=hosts,
+        allowed_methods=methods,
+        allowed_ports=ports,
+        allowed_path_prefixes=path_prefixes,
+    )
+
+
+def _normalize_host(value: str) -> str:
+    host = str(value).strip().lower().rstrip(".")
+    if not host or "*" in host or "://" in host or "/" in host:
+        raise ValueError(f"Invalid egress host '{value}'.")
+    return host
 
 _AUTH_TYPE_VALUES = {
     "none",
@@ -115,6 +162,7 @@ def build_manifest(
     runtime_compatibility_range: str,
     capabilities: list[str],
     auth_schema: dict[str, Any],
+    egress_policy: EgressPolicy,
     config_schema: dict[str, Any],
     resource_types: list[str],
     operations: list[OperationDefinition],
@@ -129,6 +177,7 @@ def build_manifest(
         runtime_compatibility_range=runtime_compatibility_range,
         capabilities=capabilities,
         auth_schema=auth_schema,
+        egress_policy=egress_policy,
         entitlement=entitlement,
         config_schema=config_schema,
         resource_types=resource_types,

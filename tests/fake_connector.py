@@ -4,6 +4,7 @@ from connector_author_sdk.connector import Connector
 from connector_author_sdk.context import ConnectorContext
 from connector_author_sdk.manifests import (
     build_manifest,
+    no_egress,
     oauth2_auth,
     query_operation,
     read_operation,
@@ -35,6 +36,7 @@ class FakeConnector(Connector):
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get", "search", "resource_list"],
             auth_schema=oauth2_auth(),
+            egress_policy=no_egress(),
             config_schema={
                 "type": "object",
                 "properties": {"workspace": {"type": "string"}},

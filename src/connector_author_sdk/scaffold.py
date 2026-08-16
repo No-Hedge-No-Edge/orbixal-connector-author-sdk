@@ -114,6 +114,7 @@ from connector_author_sdk import (
     TabularResult,
     ValidationResult,
     build_manifest,
+    no_egress,
     oauth2_auth,
     query_operation,
     read_operation,
@@ -127,10 +128,11 @@ class {class_name}(Connector):
             name="{title_name}",
             version="0.1.1",
             manifest_schema_version="2026-01",
-            sdk_version="0.1.1",
+            sdk_version="0.1.2",
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get", "search", "resource_list"],
             auth_schema=oauth2_auth(),
+            egress_policy=no_egress(),
             config_schema={{
                 "type": "object",
                 "properties": {{"workspace": {{"type": "string"}}}},
@@ -211,9 +213,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "{package_name}"
-version = "0.1.1"
+version = "0.1.2"
 requires-python = ">=3.12"
-dependencies = ["orbixal-connector-author-sdk>=0.1.1"]
+dependencies = ["orbixal-connector-author-sdk>=0.1.2"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/{package_name}"]

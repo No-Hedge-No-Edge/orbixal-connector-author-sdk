@@ -4,12 +4,6 @@
 from typing import Any, Literal, TypedDict
 
 
-class AuthSchemaDescriptor(TypedDict, total=False):
-    type: Literal['none', 'api_key', 'oauth2', 'basic_auth', 'service_account', 'custom_headers']
-    required_fields: list[str]
-    optional_fields: list[str]
-
-
 class OperationDefinition(TypedDict, total=False):
     name: str
     kind: Literal['read', 'query']
@@ -26,6 +20,17 @@ class EntitlementDescriptor(TypedDict, total=False):
     notes: str
 
 
+class EgressPolicy(TypedDict):
+    version: Literal["1"]
+    mode: Literal["none", "provider_proxy"]
+    enforcement: Literal["egress_proxy"]
+    default_action: Literal["deny"]
+    allowed_hosts: list[str]
+    allowed_methods: list[str]
+    allowed_ports: list[int]
+    allowed_path_prefixes: list[str]
+
+
 class ConnectorManifest(TypedDict):
     key: str
     name: str
@@ -34,11 +39,12 @@ class ConnectorManifest(TypedDict):
     sdk_version: str
     runtime_compatibility_range: str
     capabilities: list[str]
-    auth_schema: AuthSchemaDescriptor
+    auth_schema: dict[str, Any]
+    egress_policy: EgressPolicy
     entitlement: EntitlementDescriptor | None
     config_schema: dict[str, Any]
     resource_types: list[str]
     operations: list[OperationDefinition]
 
 
-MANIFEST_REQUIRED_FIELDS = ['key', 'name', 'version', 'manifest_schema_version', 'sdk_version', 'runtime_compatibility_range', 'capabilities', 'auth_schema', 'config_schema', 'resource_types', 'operations']
+MANIFEST_REQUIRED_FIELDS = ['key', 'name', 'version', 'manifest_schema_version', 'sdk_version', 'runtime_compatibility_range', 'capabilities', 'auth_schema', 'egress_policy', 'config_schema', 'resource_types', 'operations']

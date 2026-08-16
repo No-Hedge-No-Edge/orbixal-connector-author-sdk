@@ -13,6 +13,7 @@
     "runtime_compatibility_range",
     "capabilities",
     "auth_schema",
+    "egress_policy",
     "config_schema",
     "resource_types",
     "operations"
@@ -70,6 +71,74 @@
           "uniqueItems": true
         }
       }
+    },
+    "egress_policy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "version",
+        "mode",
+        "enforcement",
+        "default_action",
+        "allowed_hosts",
+        "allowed_methods",
+        "allowed_ports"
+      ],
+      "properties": {
+        "version": { "const": "1" },
+        "mode": { "type": "string", "enum": ["none", "provider_proxy"] },
+        "enforcement": { "const": "egress_proxy" },
+        "default_action": { "const": "deny" },
+        "allowed_hosts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$"
+          },
+          "uniqueItems": true
+        },
+        "allowed_methods": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["DELETE", "GET", "HEAD", "OPTIONS", "PATCH", "POST", "PUT"]
+          },
+          "uniqueItems": true
+        },
+        "allowed_ports": {
+          "type": "array",
+          "items": { "type": "integer", "minimum": 1, "maximum": 65535 },
+          "uniqueItems": true
+        },
+        "allowed_path_prefixes": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^/" },
+          "uniqueItems": true
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "mode": { "const": "none" } }, "required": ["mode"] },
+          "then": {
+            "properties": {
+              "allowed_hosts": { "maxItems": 0 },
+              "allowed_methods": { "maxItems": 0 },
+              "allowed_ports": { "maxItems": 0 },
+              "allowed_path_prefixes": { "maxItems": 0 }
+            }
+          }
+        },
+        {
+          "if": { "properties": { "mode": { "const": "provider_proxy" } }, "required": ["mode"] },
+          "then": {
+            "properties": {
+              "allowed_hosts": { "minItems": 1 },
+              "allowed_methods": { "minItems": 1 },
+              "allowed_ports": { "minItems": 1 }
+            }
+          }
+        }
+      ]
     },
     "entitlement": {
       "type": ["object", "null"],

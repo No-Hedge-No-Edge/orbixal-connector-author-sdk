@@ -5,12 +5,16 @@ from connector_author_sdk.manifests.builders import (
     auth_schema,
     build_manifest,
     no_auth,
+    no_egress,
     oauth2_auth,
     query_operation,
     read_operation,
+    provider_egress,
 )
 from connector_author_sdk.manifests.models import (
     ConnectorManifest,
+    EgressMode,
+    EgressPolicy,
     MANIFEST_REQUIRED_FIELDS,
     OperationDefinition,
     OperationKind,
@@ -18,6 +22,8 @@ from connector_author_sdk.manifests.models import (
 
 __all__ = [
     "ConnectorManifest",
+    "EgressMode",
+    "EgressPolicy",
     "MANIFEST_REQUIRED_FIELDS",
     "OperationDefinition",
     "OperationKind",
@@ -25,7 +31,9 @@ __all__ = [
     "auth_schema",
     "build_manifest",
     "no_auth",
+    "no_egress",
     "oauth2_auth",
     "query_operation",
     "read_operation",
+    "provider_egress",
 ]

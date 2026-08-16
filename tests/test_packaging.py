@@ -94,7 +94,6 @@ class PackagingTests(unittest.TestCase):
 
             metadata = write_release_gate_metadata(
                 artifact.output_dir,
-                allowed_hosts=["api.example.com"],
                 signing_secret="secret",
                 signing_key_id="test",
                 source_ref="git+https://github.com/orbixal/fake@abc123",
@@ -143,6 +142,7 @@ from connector_author_sdk import (
     ResourcePage,
     ValidationResult,
     build_manifest,
+    no_egress,
     no_auth,
     read_operation,
 )
@@ -159,6 +159,7 @@ class PackagedConnector(Connector):
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get"],
             auth_schema=no_auth(),
+            egress_policy=no_egress(),
             config_schema={"type": "object"},
             resource_types=["item"],
             operations=[read_operation(name="get_item", input_schema={"type": "object"})],

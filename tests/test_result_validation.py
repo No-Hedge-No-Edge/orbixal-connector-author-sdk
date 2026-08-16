@@ -5,7 +5,12 @@ import unittest
 from connector_author_sdk.connector import Connector
 from connector_author_sdk.context import ConnectorContext
 from connector_author_sdk.harness import run_query, run_read
-from connector_author_sdk.manifests import build_manifest, query_operation, read_operation
+from connector_author_sdk.manifests import (
+    build_manifest,
+    no_egress,
+    query_operation,
+    read_operation,
+)
 from connector_author_sdk.results import (
     ColumnDef,
     ConnectionTestResult,
@@ -40,6 +45,7 @@ class BrokenConnector(Connector):
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get", "search"],
             auth_schema={"type": "none"},
+            egress_policy=no_egress(),
             config_schema={"type": "object"},
             resource_types=["item"],
             operations=[

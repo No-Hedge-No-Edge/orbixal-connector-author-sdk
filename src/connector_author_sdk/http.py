@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -13,7 +14,7 @@ import httpx
 
 from connector_author_sdk.errors import ProviderUnavailableError
 
-DEFAULT_USER_AGENT = "orbixal-connector-author-sdk/0.1.1"
+DEFAULT_USER_AGENT = "orbixal-connector-author-sdk/0.1.2"
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,9 +45,17 @@ class SimpleHttpResponse:
 class SimpleHttpClient:
     """Default local HTTP client for connectors."""
 
-    def __init__(self, *, user_agent: str = DEFAULT_USER_AGENT):
+    def __init__(
+        self,
+        *,
+        user_agent: str = DEFAULT_USER_AGENT,
+        trust_env: bool = True,
+    ):
         self.user_agent = user_agent
-        self._client = httpx.Client(headers={"User-Agent": user_agent})
+        self._client = httpx.Client(
+            headers={"User-Agent": user_agent},
+            trust_env=trust_env,
+        )
         self._provider_telemetry: list[ProviderHttpTelemetry] = []
 
     def __enter__(self) -> Self:
@@ -178,6 +187,87 @@ class SimpleHttpClient:
         ]
         self._provider_telemetry.clear()
         return events
+
+
+class GatewayHttpClient(SimpleHttpClient):
+    """Provider HTTP client relayed through the trusted connector egress gateway."""
+
+    def __init__(
+        self,
+        *,
+        gateway_url: str,
+        access_token: str,
+        policy_digest: str,
+    ) -> None:
+        super().__init__(trust_env=False)
+        self._gateway_url = _absolute_https_url(gateway_url, "gateway_url")
+        self._access_token = _required(access_token, "access_token")
+        self._policy_digest = _required(policy_digest, "policy_digest")
+
+    def _request(
+        self,
+        method: str,
+        url: str,
+        *,
+        headers: Mapping[str, str] | None = None,
+        params: Mapping[str, Any] | None = None,
+        json: Mapping[str, Any] | None = None,
+        data: Any = None,
+        timeout: float | None = None,
+        provider: str | None = None,
+    ) -> SimpleHttpResponse:
+        started = perf_counter()
+        telemetry_provider = _provider_label(provider, url)
+        payload: dict[str, Any] = {
+            "method": method.upper(),
+            "url": url,
+            "headers": dict(headers or {}),
+            "params": dict(params or {}),
+            "json_body": dict(json) if json is not None else None,
+            "policy_digest": self._policy_digest,
+            "timeout_seconds": timeout,
+        }
+        if data is not None:
+            raw_data = data.encode("utf-8") if isinstance(data, str) else bytes(data)
+            payload["body_base64"] = base64.b64encode(raw_data).decode("ascii")
+        try:
+            gateway_response = self._client.post(
+                self._gateway_url,
+                headers={"Authorization": f"Bearer {self._access_token}"},
+                json=payload,
+                timeout=timeout,
+            )
+            gateway_response.raise_for_status()
+            envelope = gateway_response.json()
+            response = httpx.Response(
+                status_code=int(envelope["status_code"]),
+                headers=envelope.get("headers") or {},
+                content=base64.b64decode(envelope.get("body_base64") or ""),
+            )
+            self._provider_telemetry.append(
+                ProviderHttpTelemetry(
+                    provider=telemetry_provider,
+                    method=method.upper(),
+                    outcome=_status_outcome(response.status_code),
+                    duration_ms=round((perf_counter() - started) * 1000, 3),
+                    status_code=response.status_code,
+                )
+            )
+            return SimpleHttpResponse(response)
+        except (httpx.HTTPError, KeyError, TypeError, ValueError) as exc:
+            self._provider_telemetry.append(
+                ProviderHttpTelemetry(
+                    provider=telemetry_provider,
+                    method=method.upper(),
+                    outcome="transport_error",
+                    duration_ms=round((perf_counter() - started) * 1000, 3),
+                )
+            )
+            raise ProviderUnavailableError(
+                message="Connector egress gateway request failed.",
+                url=url,
+                method=method.upper(),
+            ) from exc
 
 
 class SimplePlatformHttpClient(SimpleHttpClient):
