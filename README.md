@@ -80,6 +80,12 @@ attestations and provenance, refreshes `checksums.json`, and regenerates
 An optional `--allowed-host` may assert that a host is already declared; it does
 not broaden or rewrite the manifest policy.
 
+Connector configuration is closed by the platform. `config_schema` remains
+required: use `{"type": "object", "properties": {}}` when the connector has no
+configuration, or declare every accepted key under `properties`. Publishers
+must not declare the JSON Schema `additionalProperties` keyword; SDK and backend
+validation reject it, and undeclared configuration keys are denied at runtime.
+
 Local `read` and `query` outputs are validated against the canonical `records` and `tabular` schemas before they are emitted.
 
 The SDK also ships:

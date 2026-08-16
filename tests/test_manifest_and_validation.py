@@ -97,6 +97,50 @@ class ManifestValidationTests(unittest.TestCase):
         self.assertFalse(result.valid)
         self.assertTrue(result.errors)
 
+    def test_config_validation_rejects_undeclared_fields_without_schema_keyword(self) -> None:
+        manifest = build_manifest(
+            key="github",
+            name="GitHub",
+            version="1.0.0",
+            manifest_schema_version="2026-01",
+            sdk_version="1.0.0",
+            runtime_compatibility_range=">=1.0,<2.0",
+            capabilities=["record_get"],
+            auth_schema={"type": "none"},
+            egress_policy=no_egress(),
+            config_schema={"type": "object", "properties": {}},
+            resource_types=["issue"],
+            operations=[read_operation(name="get_issue", input_schema={"type": "object"})],
+        )
+
+        self.assertTrue(validate_config({}, manifest).valid)
+        result = validate_config({"undeclared": "value"}, manifest)
+        self.assertFalse(result.valid)
+
+    def test_manifest_rejects_publisher_declared_additional_properties(self) -> None:
+        manifest = build_manifest(
+            key="github",
+            name="GitHub",
+            version="1.0.0",
+            manifest_schema_version="2026-01",
+            sdk_version="1.0.0",
+            runtime_compatibility_range=">=1.0,<2.0",
+            capabilities=["record_get"],
+            auth_schema={"type": "none"},
+            egress_policy=no_egress(),
+            config_schema={
+                "type": "object",
+                "properties": {},
+                "additionalProperties": False,
+            },
+            resource_types=["issue"],
+            operations=[read_operation(name="get_issue", input_schema={"type": "object"})],
+        )
+
+        result = validate_manifest(manifest)
+        self.assertFalse(result.valid)
+        self.assertEqual(result.errors[-1].field, "config_schema.additionalProperties")
+
     def test_oauth2_auth_helper_builds_backend_compatible_schema(self) -> None:
         manifest = build_manifest(
             key="github",

@@ -128,7 +128,7 @@ class {class_name}(Connector):
             name="{title_name}",
             version="0.1.1",
             manifest_schema_version="2026-01",
-            sdk_version="0.1.2",
+            sdk_version="0.1.3",
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get", "search", "resource_list"],
             auth_schema=oauth2_auth(),
@@ -213,9 +213,9 @@ build-backend = "hatchling.build"
 
 [project]
 name = "{package_name}"
-version = "0.1.2"
+version = "0.1.3"
 requires-python = ">=3.12"
-dependencies = ["orbixal-connector-author-sdk>=0.1.2"]
+dependencies = ["orbixal-connector-author-sdk>=0.1.3"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/{package_name}"]

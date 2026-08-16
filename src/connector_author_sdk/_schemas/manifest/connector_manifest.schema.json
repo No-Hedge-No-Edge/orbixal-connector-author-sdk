@@ -154,7 +154,10 @@
       }
     },
     "config_schema": {
-      "type": "object"
+      "type": "object",
+      "not": {
+        "required": ["additionalProperties"]
+      }
     },
     "resource_types": {
       "type": "array",

@@ -76,7 +76,11 @@ def validate_json_schema(
 def validate_manifest(manifest: ConnectorManifest) -> ValidationResult:
     schema = load_platform_schema("manifest/connector_manifest.schema.json")
     base_result = validate_json_schema(manifest.to_dict(), schema)
-    errors = [*base_result.errors, *_validate_manifest_auth_semantics(manifest)]
+    errors = [
+        *base_result.errors,
+        *_validate_manifest_auth_semantics(manifest),
+        *_validate_config_schema_contract(manifest.config_schema),
+    ]
     return ValidationResult.from_errors(errors)
 
 
@@ -91,7 +95,66 @@ def validate_config(
     config: Mapping[str, Any] | dict[str, Any],
     manifest: ConnectorManifest,
 ) -> ValidationResult:
-    return validate_json_schema(config, manifest.config_schema)
+    return validate_json_schema(config, _closed_config_schema(manifest.config_schema))
+
+
+def _validate_config_schema_contract(schema: dict[str, Any]) -> list[ValidationError]:
+    errors: list[ValidationError] = []
+    if schema and schema.get("type") != "object":
+        errors.append(
+            ValidationError(
+                field="config_schema.type",
+                message="Connector config schemas must describe an object.",
+            )
+        )
+    for path in _find_schema_keyword(schema, keyword="additionalProperties"):
+        errors.append(
+            ValidationError(
+                field=f"config_schema{path}",
+                message=(
+                    "additionalProperties is platform-managed and must not be declared. "
+                    "Declare accepted configuration keys under properties."
+                ),
+            )
+        )
+    return errors
+
+
+def _find_schema_keyword(value: Any, *, keyword: str, path: str = "") -> list[str]:
+    matches: list[str] = []
+    if isinstance(value, dict):
+        for key, item in value.items():
+            item_path = f"{path}.{key}"
+            if key == keyword:
+                matches.append(item_path)
+            matches.extend(_find_schema_keyword(item, keyword=keyword, path=item_path))
+    elif isinstance(value, list):
+        for index, item in enumerate(value):
+            matches.extend(
+                _find_schema_keyword(item, keyword=keyword, path=f"{path}[{index}]")
+            )
+    return matches
+
+
+def _closed_config_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    if not schema:
+        return {"type": "object", "properties": {}, "additionalProperties": False}
+    closed = _close_object_schemas(schema)
+    closed.setdefault("type", "object")
+    closed.setdefault("properties", {})
+    closed["additionalProperties"] = False
+    return closed
+
+
+def _close_object_schemas(value: Any) -> Any:
+    if isinstance(value, dict):
+        closed = {key: _close_object_schemas(item) for key, item in value.items()}
+        if closed.get("type") == "object" or "properties" in closed:
+            closed["additionalProperties"] = False
+        return closed
+    if isinstance(value, list):
+        return [_close_object_schemas(item) for item in value]
+    return value
 
 
 def validate_auth_payload(

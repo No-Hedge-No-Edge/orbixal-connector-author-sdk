@@ -154,6 +154,26 @@ def render_manifest_models(source_repo: Path) -> str:
             output_schema: dict[str, Any]
 
 
+        class EntitlementDescriptor(TypedDict, total=False):
+            provider: str
+            requires_byok: bool
+            storage_policy: str
+            exposure_policy: str
+            audit_policy: str
+            notes: str
+
+
+        class EgressPolicy(TypedDict):
+            version: Literal["1"]
+            mode: Literal["none", "provider_proxy"]
+            enforcement: Literal["egress_proxy"]
+            default_action: Literal["deny"]
+            allowed_hosts: list[str]
+            allowed_methods: list[str]
+            allowed_ports: list[int]
+            allowed_path_prefixes: list[str]
+
+
         class ConnectorManifest(TypedDict):
             key: str
             name: str
@@ -163,6 +183,8 @@ def render_manifest_models(source_repo: Path) -> str:
             runtime_compatibility_range: str
             capabilities: list[str]
             auth_schema: AuthSchemaDescriptor
+            egress_policy: EgressPolicy
+            entitlement: EntitlementDescriptor | None
             config_schema: dict[str, Any]
             resource_types: list[str]
             operations: list[OperationDefinition]
