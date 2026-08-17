@@ -14,7 +14,7 @@ import httpx
 
 from connector_author_sdk.errors import ProviderUnavailableError
 
-DEFAULT_USER_AGENT = "orbixal-connector-author-sdk/0.1.3"
+DEFAULT_USER_AGENT = "orbixal-connector-author-sdk/0.1.4"
 
 
 @dataclass(frozen=True, slots=True)
@@ -200,7 +200,7 @@ class GatewayHttpClient(SimpleHttpClient):
         policy_digest: str,
     ) -> None:
         super().__init__(trust_env=False)
-        self._gateway_url = _absolute_https_url(gateway_url, "gateway_url")
+        self._gateway_url = _absolute_http_url(gateway_url, "gateway_url")
         self._access_token = _required(access_token, "access_token")
         self._policy_digest = _required(policy_digest, "policy_digest")
 
@@ -418,6 +418,13 @@ def _absolute_https_url(value: str, name: str) -> str:
     parsed = urlparse(value)
     if parsed.scheme != "https" or not parsed.netloc:
         raise ValueError(f"{name} must be an absolute HTTPS URL")
+    return value
+
+
+def _absolute_http_url(value: str, name: str) -> str:
+    parsed = urlparse(value)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError(f"{name} must be an absolute HTTP(S) URL")
     return value
 
 
