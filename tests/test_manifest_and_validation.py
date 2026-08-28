@@ -150,7 +150,11 @@ class ManifestValidationTests(unittest.TestCase):
             sdk_version="1.0.0",
             runtime_compatibility_range=">=1.0,<2.0",
             capabilities=["record_get"],
-            auth_schema=oauth2_auth(provider="github", default_scopes=["repo"]),
+            auth_schema=oauth2_auth(
+                provider="github",
+                default_scopes=["repo"],
+                client_auth_method="client_secret_basic",
+            ),
             egress_policy=no_egress(),
             config_schema={"type": "object"},
             resource_types=["issue"],
@@ -167,11 +171,40 @@ class ManifestValidationTests(unittest.TestCase):
                 "optional_fields": ["refresh_token", "expires_at", "scopes"],
                 "provider": "github",
                 "default_scopes": ["repo"],
+                "client_auth_method": "client_secret_basic",
             },
         )
 
         auth_result = validate_auth_payload({"access_token": "token"}, manifest)
         self.assertTrue(auth_result.valid)
+
+    def test_oauth2_auth_helper_rejects_unknown_client_auth_method(self) -> None:
+        with self.assertRaisesRegex(ValueError, "Unsupported OAuth client auth method"):
+            oauth2_auth(client_auth_method="private_key_jwt")  # type: ignore[arg-type]
+
+    def test_oauth2_auth_schema_rejects_unknown_client_auth_method(self) -> None:
+        manifest = build_manifest(
+            key="example",
+            name="Example",
+            version="1.0.0",
+            manifest_schema_version="2026-01",
+            sdk_version="1.0.0",
+            runtime_compatibility_range=">=1.0,<2.0",
+            capabilities=["record_get"],
+            auth_schema={
+                **oauth2_auth(),
+                "client_auth_method": "private_key_jwt",
+            },
+            egress_policy=no_egress(),
+            config_schema={"type": "object"},
+            resource_types=["record"],
+            operations=[read_operation(name="get_record", input_schema={"type": "object"})],
+        )
+
+        result = validate_manifest(manifest)
+
+        self.assertFalse(result.valid)
+        self.assertEqual(result.errors[-1].field, "auth_schema.client_auth_method")
 
     def test_oauth2_auth_schema_requires_access_token(self) -> None:
         manifest = build_manifest(

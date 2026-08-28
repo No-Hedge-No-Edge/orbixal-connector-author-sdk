@@ -13,6 +13,11 @@ from connector_author_sdk.manifests.models import ConnectorManifest
 from connector_author_sdk.results.models import ValidationError
 
 
+_OAUTH_CLIENT_AUTH_METHODS = frozenset(
+    {"client_secret_post", "client_secret_basic"}
+)
+
+
 PACKAGE_SCHEMA_ROOT = Path(__file__).resolve().parent / "_schemas"
 PLATFORM_AUTH_TYPES = {
     "none",
@@ -234,6 +239,20 @@ def _validate_manifest_auth_semantics(manifest: ConnectorManifest) -> list[Valid
         )
     if auth_type == "oauth2":
         errors.extend(_reject_backend_managed_oauth_keys(auth_schema, "auth_schema"))
+        client_auth_method = auth_schema.get("client_auth_method")
+        if (
+            client_auth_method is not None
+            and client_auth_method not in _OAUTH_CLIENT_AUTH_METHODS
+        ):
+            errors.append(
+                ValidationError(
+                    field="auth_schema.client_auth_method",
+                    message=(
+                        "client_auth_method must be 'client_secret_post' or "
+                        "'client_secret_basic'."
+                    ),
+                )
+            )
     return errors
 
 

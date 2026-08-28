@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from connector_author_sdk.manifests.models import (
     ConnectorManifest,
@@ -65,6 +65,11 @@ _AUTH_TYPE_VALUES = {
     "custom_headers",
 }
 
+OAuthClientAuthMethod = Literal["client_secret_post", "client_secret_basic"]
+_OAUTH_CLIENT_AUTH_METHODS = frozenset(
+    {"client_secret_post", "client_secret_basic"}
+)
+
 
 def oauth2_auth(
     *,
@@ -74,6 +79,7 @@ def oauth2_auth(
     default_scopes: list[str] | None = None,
     authorization_url: str | None = None,
     token_url: str | None = None,
+    client_auth_method: OAuthClientAuthMethod | None = None,
 ) -> dict[str, Any]:
     """Build a backend-compatible OAuth2 auth schema without app secrets."""
 
@@ -92,6 +98,12 @@ def oauth2_auth(
         schema["authorization_url"] = authorization_url
     if token_url is not None:
         schema["token_url"] = token_url
+    if client_auth_method is not None:
+        if client_auth_method not in _OAUTH_CLIENT_AUTH_METHODS:
+            raise ValueError(
+                f"Unsupported OAuth client auth method '{client_auth_method}'."
+            )
+        schema["client_auth_method"] = client_auth_method
     return schema
 
 
